@@ -1,15 +1,30 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Gradle files
+.gradle/
+build/
+*/build/
+gradle-app.setting
+
+# Local configuration file (contains absolute paths and API keys)
 local.properties
+
+# IntelliJ IDEA / Android Studio workspace files
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/vcs.xml
+
+# macOS specific files
+.DS_Store
+
+# Native build folders
+.externalNativeBuild/
+.cxx/
+
+# Captures and profiling data
+/captures/
+*.ap_
