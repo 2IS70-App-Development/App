@@ -1,7 +1,8 @@
 # CryptoSeal Development Guide
 
 ## Project Overview
-CryptoSeal is a decentralized business logistics Android application. The UI is built entirely using Jetpack Compose and Kotlin. The app features a standard Login screen, followed by a main dashboard utilizing a Bottom Navigation Bar with five distinct screens.
+CryptoSeal is a decentralized business logistics Android application. The UI is built entirely using Jetpack Compose and Kotlin. The app features a standard Login screen, followed by a main dashboard utilizing a Bottom Navigation Bar with five distinct screens. The Login Screen is a generic entry point requiring a Username and Password. Upon successful authentication, the user is navigated to the Main Dashboard, and the backstack is cleared so they cannot navigate back to the login screen using the device's back button.
+
 
 ## Architectural Guidelines
 * Use Jetpack Compose for all UI elements.
@@ -10,12 +11,32 @@ CryptoSeal is a decentralized business logistics Android application. The UI is 
 * Maintain state using ViewModels.
 * Keep the package lists hoisted in a shared ViewModel or repository so that actions in the Creator and Scanner tabs immediately update the UI in the List tabs.
 
-## Authentication Flow
-* **Login Screen:** A generic entry point requiring a Username and Password.
-* **Routing:** Upon successful authentication, the user is navigated to the Main Dashboard, and the backstack is cleared so they cannot navigate back to the login screen using the device's back button.
+How the files should be organized:  
+app.cryptoseal/  
+├── MainActivity.kt  
+├── CryptoSealApplication.kt  
+├── core/  
+│   ├── navigation/  
+│   ├── theme/  
+│   ├── components/  
+│   ├── crypto/  
+│   └── data/  
+└── feature/  
+    ├── auth/  
+    │   ├── LoginScreen.kt  
+    │   └── AuthViewModel.kt  
+    ├── packages/  
+    │   ├── SendingListScreen.kt  
+    │   ├── ReceivingListScreen.kt  
+    │   ├── CreatorScreen.kt  
+    │   └── PackagesViewModel.kt  
+    ├── scanner/  
+    │   ├── ScannerScreen.kt  
+    │   └── ScannerViewModel.kt  
+    └── profile/  
+        ├── ProfileScreen.kt  
+        └── ProfileViewModel.kt  
 
-## Main Dashboard (Bottom Navigation)
-The main interface consists of a Scaffold with a BottomNavigationBar containing five specific destinations:
 
 ## Main Dashboard (Bottom Navigation)
 The main interface consists of a Scaffold with a BottomNavigationBar containing five specific destinations:

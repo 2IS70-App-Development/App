@@ -3,96 +3,68 @@ package app.cryptoseal
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import app.cryptoseal.ui.theme.CryptoSealTheme
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import app.cryptoseal.core.navigation.Screen
+import app.cryptoseal.feature.auth.LoginScreen
+import app.cryptoseal.feature.dashboard.DashboardScreen
+import app.cryptoseal.core.theme.CryptoSealTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
             CryptoSealTheme {
-                LoginScreen(
-                    onLoginClick = { username, password ->
-                        println("Attempting to login Employee ID: $username")
-                    }
-                )
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    CryptoSealNavGraph()
+                }
             }
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+fun CryptoSealNavGraph() {
+    val navController = rememberNavController()
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    CryptoSealTheme {
-        Greeting("Android")
-    }
-}
-
-@Composable
-fun LoginScreen(onLoginClick: (String, String) -> Unit) {
-    // State variables to hold the text as the user types
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
-    Column(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxSize(),
-        verticalArrangement = Arrangement.Center
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Login.route
     ) {
-        Text(
-            text = "CryptoSeal",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        // Login Screen Destination
+        composable(route = Screen.Login.route) {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        // This block clears the backstack
+                        popUpTo(Screen.Login.route) {
+                            inclusive = true
+                        }
+                    }
+                }
+            )
+        }
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Username") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = { onLoginClick(username, password) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Login")
+        // Main Dashboard Destination
+        composable(route = Screen.Dashboard.route) {
+            DashboardScreen(
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Dashboard.route) {
+                            inclusive = true
+                        }
+                    }
+                }
+            )
         }
     }
 }
