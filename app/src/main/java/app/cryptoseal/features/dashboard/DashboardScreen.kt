@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -54,17 +55,19 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
         BottomNavItem.Profile
     )
 
-    NavigationBar {
+    NavigationBar(
+        // This forces the bar's background to use your custom Dark Navy
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
 
         items.forEach { item ->
-            // Selecting icons based on the route
             val icon = when (item) {
                 BottomNavItem.Sending -> Icons.Default.List
-                BottomNavItem.Receiving -> Icons.Default.Call // Placeholder icon
+                BottomNavItem.Receiving -> Icons.Default.Call
                 BottomNavItem.Creator -> Icons.Default.Add
-                BottomNavItem.Scanner -> Icons.Default.Search // Placeholder icon
+                BottomNavItem.Scanner -> Icons.Default.Search
                 BottomNavItem.Profile -> Icons.Default.Person
                 else -> Icons.Default.List
             }
@@ -81,7 +84,15 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
                         launchSingleTop = true
                         restoreState = true
                     }
-                }
+                },
+                // This block explicitly overrides the default M3 colors
+                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary, // Cyan icon
+                    selectedTextColor = MaterialTheme.colorScheme.primary, // Cyan text
+                    indicatorColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f), // Subtle Steel Blue pill
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), // Dimmed white
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             )
         }
     }

@@ -5,16 +5,22 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// Define your dark mode colors here
+// Colors extracted from the CryptoSeal logo
+private val CryptoSealCyan = Color(0xFF5CE1D6)        // Bright cyan for primary buttons/accents
+private val CryptoSealSteelBlue = Color(0xFF418B9F)   // Muted steel blue for secondary elements
+private val CryptoSealDarkNavy = Color(0xFF09141E)    // Very dark navy for the main background
+private val CryptoSealSurfaceNavy = Color(0xFF132738) // Slightly lighter navy for cards and dialogs
+private val CryptoSealTextWhite = Color(0xFFE5F7F5)   // Cyan-tinted white for text readability
+
 private val DarkColorPalette = darkColorScheme(
-    primary = Color(0xFFBB86FC),      // Light purple for primary buttons/accents
-    secondary = Color(0xFF03DAC5),    // Teal for secondary elements
-    background = Color(0xFF121212),   // Very dark gray for the main background
-    surface = Color(0xFF1E1E1E),      // Slightly lighter gray for cards and dialogs
-    onPrimary = Color.Black,          // Text color on top of primary color
-    onSecondary = Color.Black,        // Text color on top of secondary color
-    onBackground = Color.White,       // Text color on the main background
-    onSurface = Color.White           // Text color on surface elements
+    primary = CryptoSealCyan,
+    secondary = CryptoSealSteelBlue,
+    background = CryptoSealDarkNavy,
+    surface = CryptoSealSurfaceNavy,
+    onPrimary = Color.Black,
+    onSecondary = Color.White,
+    onBackground = CryptoSealTextWhite,
+    onSurface = CryptoSealTextWhite
 )
 
 @Composable
