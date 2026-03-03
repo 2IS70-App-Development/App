@@ -11,10 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import app.cryptoseal.core.navigation.Screen
 import app.cryptoseal.feature.auth.LoginScreen
 import app.cryptoseal.feature.dashboard.DashboardScreen
-import app.cryptoseal.core.theme.CryptoSealTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

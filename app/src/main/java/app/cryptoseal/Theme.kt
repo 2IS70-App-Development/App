@@ -1,4 +1,4 @@
-package app.cryptoseal.core.theme
+package app.cryptoseal
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme

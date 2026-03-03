@@ -14,9 +14,8 @@ The sender can monitor this chain in real time and knows exactly who had the pac
 The core principle is simple: if you touch the package, you're on the record.
 
 
-### How It Works in Practice
-A sender at a warehouse prepares a shipment. 
-They open CryptoSeal, add the shipment details, and generate a QR code which gets printed and attached to the container. 
+### How It Works in Practice 
+A person opens CryptoSeal, adds the shipment details, and generates a QR code which gets printed and attached to the container. 
 At this point, the package appears in their list, and they are the first entry in its chain of custody.
 The package gets picked up by a driver. 
 The driver scans the QR code with CryptoSeal's built-in scanner. 
@@ -41,6 +40,12 @@ And finally the Profile screen shows the user's identity and their contacts dire
 
 
 ### The Server Structure
+The CryptoSeal backend acts as the centralized, authoritative ledger for all chain-of-custody events. 
+It exposes a secure TLS connection that the mobile client uses to authenticate users, sync shipment lists, and register new scans. 
+At its core, the server manages a relational database that links Users, Shipments, and Event Logs. 
+When a QR code is scanned, the server receives the request, validates the user's session, timestamps the entry, and appends the new handler to the shipment's history. 
+Crucially, to support the Activity tab, the server acts as a real-time event engine. 
+It utilizes push notifications to instantly broadcast status changes, ensuring that when a driver scans a package in the field, the sender's dashboard updates immediately without needing to refresh.
 
 
 ### Why It Matters

@@ -13,32 +13,29 @@ The person who is at the bottom of the chain is currently is responsible for the
 
 How the files should be organized:  
 app.cryptoseal/  
-├── MainActivity.kt  
-├── CryptoSealApplication.kt  
-├── core/  
-│   ├── navigation/  
-│   ├── theme/  
-│   ├── components/  
-│   ├── crypto/  
-│   └── data/  
-└── feature/  
-├── auth/  
-│   ├── LoginScreen.kt  
-│   └── AuthViewModel.kt  
-├── packages/  
-│   ├── PackagesScreen.kt  
-│   ├── PackageDetailScreen.kt  
-│   ├── CreatorScreen.kt  
-│   └── PackagesViewModel.kt  
-├── scanner/  
-│   ├── ScannerScreen.kt  
-│   └── ScannerViewModel.kt  
-├── activity/  
-│   ├── ActivityScreen.kt  
-│   └── ActivityViewModel.kt  
-└── profile/  
-├── ProfileScreen.kt  
-└── ProfileViewModel.kt
+├── MainActivity.kt
+├── Navigation.kt
+├── Theme.kt
+├── data/  
+│   ├── PackageItem.kt
+│   └── User.kt
+├── screens/  
+│   ├── LoginScreen.kt
+│   └── DashboardScreen.kt
+└── tabs/  
+    ├── PackagesViewModel.kt
+    ├── packages/
+    │   ├── PackagesTab.kt  
+    │   └── PackageDetailSheet.kt
+    ├── creator/
+    │   └── CreatorTab.kt
+    ├── scanner/  
+    │   └── ScannerTab.kt
+    ├── activity/  
+    │   └── ActivityTab.kt   
+    └── profile/  
+        ├── ProfileTab.kt  
+        └── ProfileViewModel.kt
 
 
 ### Navigation
@@ -53,9 +50,9 @@ Tapping a package card navigates to the Package Detail Screen.
 This is not a separate bottom nav destination, it is a nested route so the user stays contextually within the Packages tab. 
 The back button returns to the list.
 
-**Package Detail Screen**
+**Package Detail Sheet**
 
-This is a full-screen view that opens when a user taps a package card from the Packages tab or an event from the Activity tab.
+This is an almost full-screen view that opens when a user taps a package card from the Packages tab or an event from the Activity tab.
 Display the shipment name, sender and receiver, current status, recipient or sender information, and the date created. A scrollable vertical timeline implemented as a `LazyColumn` with custom drawn connectors (vertical lines between nodes). 
 Each node displays the handler's name, the timestamp of their scan, and their GPS location if available. The first entry is always the creator, and the last entry is the most recent scan. This is the core accountability feature of CryptoSeal.
 
