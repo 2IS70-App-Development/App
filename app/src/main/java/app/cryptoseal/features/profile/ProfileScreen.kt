@@ -12,18 +12,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,29 +38,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+// Data model for the contacts
+data class Contact(val id: String, val name: String, val role: String)
+
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
-    // Placeholder states for the settings toggles
-    var offlineCachingEnabled by remember { mutableStateOf(false) }
-    var scanFeedbackEnabled by remember { mutableStateOf(true) }
-    var autoFlashEnabled by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    // Hardcoded user data for UI verification
+    // Placeholder contacts data
+    val contacts = listOf(
+        Contact("1", "Elena Rostova", "Warehouse Manager - Sector 7"),
+        Contact("2", "Marcus Vance", "Independent Courier"),
+        Contact("3", "Sarah Jenkins", "Compliance Officer - Apex Logistics")
+    )
+
     val employeeId = "EMP-8492"
     val publicKey = "0x4A2B...9F1E"
 
-    Column(
+    // A single LazyColumn handles the entire screen's scrolling
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column {
-            // 1. Top Section: Profile Card
+        // --- Top Section: Profile Card ---
+        item {
             Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
@@ -69,7 +80,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Circular User Avatar
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -86,7 +96,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    // Employee ID
                     Text(
                         text = employeeId,
                         style = MaterialTheme.typography.titleLarge,
@@ -96,7 +105,6 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Logout Button
                     IconButton(onClick = onLogout) {
                         Icon(
                             imageVector = Icons.Default.ExitToApp,
@@ -106,85 +114,110 @@ fun ProfileScreen(onLogout: () -> Unit) {
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // 2. Middle Section: Cryptographic Identity
-            Text(
-                text = "Cryptographic Identity",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            OutlinedTextField(
-                value = publicKey,
-                onValueChange = { }, // Read-only, so this does nothing
-                readOnly = true,
-                label = { Text("Public Key") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = { /* TODO: Implement clipboard copy */ }) {
-                        // Using a standard text label as a placeholder for a copy icon
-                        Text("Copy", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // 3. Lower Section: App Preferences
-            Text(
-                text = "App Preferences",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            PreferenceToggleRow(
-                label = "Offline Caching",
-                isChecked = offlineCachingEnabled,
-                onCheckedChange = { offlineCachingEnabled = it }
-            )
-            PreferenceToggleRow(
-                label = "Scan Success Feedback",
-                isChecked = scanFeedbackEnabled,
-                onCheckedChange = { scanFeedbackEnabled = it }
-            )
-            PreferenceToggleRow(
-                label = "Camera Auto-Flash",
-                isChecked = autoFlashEnabled,
-                onCheckedChange = { autoFlashEnabled = it }
-            )
         }
 
-        // 4. Bottom Section: Footer
-        Text(
-            text = "CryptoSeal App v1.0.0",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+        // --- Middle Section: Cryptographic Identity ---
+        item {
+            Column {
+                Text(
+                    text = "Cryptographic Identity",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = publicKey,
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("Public Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = { /* TODO: Implement clipboard copy */ }) {
+                            Text("Copy", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                )
+            }
+        }
+
+        // --- Contacts Section Header & Search ---
+        item {
+            Column {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Contacts",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Button(onClick = { /* TODO: Add contact logic */ }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Contact")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search contacts...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        }
+
+        // --- Contacts List ---
+        items(contacts) { contact ->
+            ContactListItem(contact = contact)
+        }
     }
 }
 
 @Composable
-fun PreferenceToggleRow(label: String, isChecked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+fun ContactListItem(contact: Contact) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Switch(
-            checked = isChecked,
-            onCheckedChange = onCheckedChange
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = contact.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = contact.role,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+            IconButton(onClick = { /* TODO: Remove contact logic */ }) {
+                Icon(
+                    imageVector = Icons.Default.Clear,
+                    contentDescription = "Remove Contact",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        }
     }
 }

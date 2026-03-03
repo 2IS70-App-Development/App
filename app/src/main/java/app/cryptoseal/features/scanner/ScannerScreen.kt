@@ -42,6 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.runtime.remember
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun ScannerScreen() {
@@ -126,7 +133,7 @@ fun ScannerScreen() {
 @Composable
 fun CameraPreviewWithOverlay() {
     Box(modifier = Modifier.fillMaxSize()) {
-        // TODO: Insert CameraX Live Preview Here
+        CameraXLivePreview()
 
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasWidth = size.width
@@ -186,4 +193,48 @@ fun CameraPreviewWithOverlay() {
             )
         }
     }
+}
+
+@Composable
+fun CameraXLivePreview() {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+
+    AndroidView(
+        factory = { ctx ->
+            val previewView = PreviewView(ctx)
+            val executor = ContextCompat.getMainExecutor(ctx)
+
+            cameraProviderFuture.addListener({
+                val cameraProvider = cameraProviderFuture.get()
+
+                // Set up the preview use case
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+
+                // Select the back camera
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                try {
+                    // Unbind use cases before rebinding
+                    cameraProvider.unbindAll()
+
+                    // Bind use cases to camera
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview
+                    )
+                } catch (exc: Exception) {
+                    // In a production app, log this error
+                    exc.printStackTrace()
+                }
+            }, executor)
+
+            previewView
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
