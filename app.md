@@ -26,7 +26,7 @@ app.cryptoseal/
     ├── PackagesViewModel.kt
     ├── packages/
     │   ├── PackagesTab.kt  
-    │   └── PackageDetailSheet.kt
+    │   └── PackageSheet.kt
     ├── creator/
     │   └── CreatorTab.kt
     ├── scanner/  
@@ -50,7 +50,7 @@ Tapping a package card navigates to the Package Detail Screen.
 This is not a separate bottom nav destination, it is a nested route so the user stays contextually within the Packages tab. 
 The back button returns to the list.
 
-**Package Detail Sheet**
+**Package Sheet**
 
 This is an almost full-screen view that opens when a user taps a package card from the Packages tab or an event from the Activity tab.
 Display the shipment name, sender and receiver, current status, recipient or sender information, and the date created. A scrollable vertical timeline implemented as a `LazyColumn` with custom drawn connectors (vertical lines between nodes). 
@@ -66,14 +66,13 @@ If there is no activity yet, display a centered illustration or icon with a `Tex
 ### 3 QR Code Creator
 A form where the user inputs shipment details to generate a unique QR code label. 
 Successful generation adds an entry to the Packages list under "Sent" and initializes the chain of custody with the creator as the first entry.
-A vertically scrollable `Column`.
 Use multiple `OutlinedTextField` components for the user to input the shipment details. 
 Name is a wide box at the top.
-Sender is already filled in and unchangeable on the left and on the right receiver.
+Sender is already filled in and unchangeable (grayed out) and next receiver pulls from the contacts directory.
 A bigger text box for the description.
-A image submission placeholder for now.
+An image submission placeholder for now.
 Place a wide, prominent `Button` at the bottom labeled "Generate QR Code". 
-Upon clicking, it should display the generated QR code in a centered `Image` component or a modal dialog with an option to share or print.
+Upon clicking, it should display the generated QR code in a centered sheet component with an option to share or print.
 
 ### 4 QR Code Scanner
 A camera-enabled screen utilizing Android CameraX to scan external CryptoSeal QR codes. 

@@ -25,11 +25,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.cryptoseal.BottomNavItem
 import app.cryptoseal.tabs.activity.ActivityTab
-import app.cryptoseal.feature.packages.CreatorScreen
-import app.cryptoseal.feature.packages.PackagesScreen
+import app.cryptoseal.tabs.creator.CreatorTab
+import app.cryptoseal.tabs.scanner.ScannerTab
 import app.cryptoseal.tabs.PackagesViewModel
-import app.cryptoseal.feature.profile.ProfileScreen
-import app.cryptoseal.feature.scanner.ScannerScreen
+import app.cryptoseal.tabs.packages.PackagesTab
+import app.cryptoseal.tabs.profile.ProfileTab
 
 @Composable
 fun DashboardScreen(onLogout: () -> Unit) {
@@ -107,19 +107,19 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
     ) {
         // 3. Updated Graph Destinations
         composable(BottomNavItem.Packages.route) {
-            PackagesScreen(viewModel = sharedPackagesViewModel)
+            PackagesTab(viewModel = sharedPackagesViewModel)
         }
         composable(BottomNavItem.Activity.route) {
             ActivityTab()
         }
         composable(BottomNavItem.Creator.route) {
-            CreatorScreen(viewModel = sharedPackagesViewModel)
+            CreatorTab(viewModel = sharedPackagesViewModel)
         }
         composable(BottomNavItem.Scanner.route) {
-            ScannerScreen()
+            ScannerTab()
         }
         composable(BottomNavItem.Profile.route) {
-            ProfileScreen(onLogout = onLogout)
+            ProfileTab(onLogout = onLogout)
         }
     }
 }

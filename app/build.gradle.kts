@@ -69,4 +69,7 @@ dependencies {
     // Google ML Kit for reading the QR Code
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // More icons
+    implementation("androidx.compose.material:material-icons-extended")
 }

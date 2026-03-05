@@ -10,8 +10,11 @@ The result is costly disputes, slow insurance claims, and a logistics chain buil
 CryptoSeal is a mobile application that creates a verifiable, digital chain of custody for every shipment. 
 Every time a package changes hands, the person receiving it scans a QR code on the container. 
 That scan registers them onto an ordered list tied to that shipment.
-The sender can monitor this chain in real time and knows exactly who had the package at every point in its journey. 
-The core principle is simple: if you touch the package, you're on the record.
+The sender can monitor this chain in real time and knows exactly who had the package at every point in its journey.
+CryptoSeal doesn't try to prevent theft or tampering through the QR code itself.
+A sticker on a box can't do that.
+What it does is make every handler accountable by default.
+No extra paperwork, just a clear, timestamped record of every hand the package passed through.
 
 
 ### How It Works in Practice 
@@ -46,12 +49,3 @@ At its core, the server manages a relational database that links Users, Shipment
 When a QR code is scanned, the server receives the request, validates the user's session, timestamps the entry, and appends the new handler to the shipment's history. 
 Crucially, to support the Activity tab, the server acts as a real-time event engine. 
 It utilizes push notifications to instantly broadcast status changes, ensuring that when a driver scans a package in the field, the sender's dashboard updates immediately without needing to refresh.
-
-
-### Why It Matters
-CryptoSeal doesn't try to prevent theft or tampering through the QR code itself. 
-A sticker on a box can't do that. 
-What it does is make every handler accountable by default. 
-The moment you scan that code, you've accepted responsibility for the package. 
-That social and legal pressure alone changes behavior, and when things do go wrong, the evidence trail is already built. 
-No extra paperwork, just a clear, timestamped record of every hand the package passed through.

@@ -1,4 +1,4 @@
-package app.cryptoseal.feature.scanner
+package app.cryptoseal.tabs.scanner
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -50,7 +50,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
-fun ScannerScreen() {
+fun ScannerTab() {
     val context = LocalContext.current
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -103,7 +103,7 @@ fun ScannerScreen() {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Align the CryptoSeal QR code within the frame to verify the package.",
+                text = "Align the QR code within the frame.",
                 color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
