@@ -17,6 +17,9 @@ object ApiService {
     var authToken: String? = null
         private set
 
+    var currentUser: User? = null
+        private set
+
     suspend fun signup(email: String, password: String): Result<User> = withContext(Dispatchers.IO) {
         try {
             val url = URL("$BASE_URL/signup")
@@ -63,6 +66,7 @@ object ApiService {
                 HttpsURLConnection.HTTP_OK -> {
                     val authResponse = gson.fromJson(response, AuthResponse::class.java)
                     authToken = authResponse.accessToken
+                    fetchCurrentUser(email)
                     Result.success(authResponse.accessToken)
                 }
                 else -> {
@@ -79,8 +83,15 @@ object ApiService {
         }
     }
 
+    private suspend fun fetchCurrentUser(email: String) {
+        getUsers().onSuccess { users ->
+            currentUser = users.find { it.email == email }
+        }
+    }
+
     fun logout() {
         authToken = null
+        currentUser = null
     }
 
     fun isLoggedIn(): Boolean = authToken != null

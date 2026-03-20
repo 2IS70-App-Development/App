@@ -26,32 +26,48 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.cryptoseal.data.api.ApiService
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
-data class Contact(val id: String, val name: String)
+data class Contact(val id: Int, val email: String)
 
 @Composable
 fun ProfileTab(onLogout: () -> Unit) {
-    val contacts = listOf(
-        Contact("1", "Elena Rostova"),
-        Contact("2", "Marcus Vance"),
-        Contact("3", "Sarah Jenkins"),
-        Contact("4", "Simon Smith"),
-        Contact("5", "Carl Homer")
-    )
+    val currentUser = ApiService.currentUser
+    var contacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    val employeeId = "Dan Joe"
-    val phoneNumber = "+1 (555) 019-8372"
-    val emailAddress = "dan.joe@cryptoseal.app"
+    val scope = rememberCoroutineScope()
+
+    //TODO use contacts when support for contacts is added in the backend
+    LaunchedEffect(Unit) {
+        scope.launch {
+            ApiService.getUsers().fold(
+                onSuccess = { users ->
+                    contacts = users.map { Contact(it.id, it.email) }
+                },
+                onFailure = { }
+            )
+            isLoading = false
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -59,7 +75,6 @@ fun ProfileTab(onLogout: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- Profile Card ---
         item {
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -90,16 +105,26 @@ fun ProfileTab(onLogout: () -> Unit) {
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    Text(
-                        text = employeeId,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentUser?.email ?: "Loading...",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        currentUser?.let {
+                            Text(
+                                text = "ID: ${it.id}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    IconButton(onClick = onLogout) {
+                    IconButton(onClick = {
+                        ApiService.logout()
+                        onLogout()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.ExitToApp,
                             contentDescription = "Logout",
@@ -110,7 +135,6 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         }
 
-        // --- Contact Information ---
         item {
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -131,12 +155,15 @@ fun ProfileTab(onLogout: () -> Unit) {
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = "Phone",
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "User ID",
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(text = phoneNumber, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            text = "User ID: ${currentUser?.id ?: "Loading..."}",
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -148,13 +175,15 @@ fun ProfileTab(onLogout: () -> Unit) {
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(text = emailAddress, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            text = currentUser?.email ?: "Loading...",
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
         }
 
-        // --- Contacts Section Header ---
         item {
             Column {
                 Spacer(modifier = Modifier.height(32.dp))
@@ -177,9 +206,21 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         }
 
-        // --- Contacts List ---
-        items(contacts) { contact ->
-            ContactListItem(contact = contact)
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else {
+            items(contacts) { contact ->
+                ContactListItem(contact = contact)
+            }
         }
     }
 }
@@ -201,7 +242,7 @@ fun ContactListItem(contact: Contact) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = contact.name,
+                    text = contact.email,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
