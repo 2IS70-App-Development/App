@@ -5,7 +5,6 @@ import app.cryptoseal.tabs.packages.PackageItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.UUID
 
 class PackagesViewModel : ViewModel() {
 
@@ -30,16 +29,7 @@ class PackagesViewModel : ViewModel() {
     }
 
     // --- Package Actions ---
-    fun createAndAddPackage(name: String, routingInfo: String, manifestData: String): String {
-        val orderId = UUID.randomUUID().toString()
-        // Newly created packages are inherently sent by us
-        val newPackage = PackageItem(
-            id = orderId,
-            name = name,
-            status = "Ready for transit",
-            isSentByMe = true
-        )
-        _allPackages.value = _allPackages.value + newPackage
-        return orderId
+    fun addPackage(packageItem: PackageItem) {
+        _allPackages.value = _allPackages.value + packageItem
     }
 }

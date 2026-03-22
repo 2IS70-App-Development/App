@@ -113,7 +113,10 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
             ActivityTab()
         }
         composable(BottomNavItem.Creator.route) {
-            CreatorTab(viewModel = sharedPackagesViewModel)
+            CreatorTab(
+                creatorViewModel = viewModel(),
+                packagesViewModel = sharedPackagesViewModel
+            )
         }
         composable(BottomNavItem.Scanner.route) {
             ScannerTab()

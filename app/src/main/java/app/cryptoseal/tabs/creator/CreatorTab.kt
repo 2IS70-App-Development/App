@@ -1,5 +1,14 @@
 package app.cryptoseal.tabs.creator
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,18 +22,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,64 +47,150 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.tabs.PackagesViewModel
-import androidx.compose.foundation.Image
-import app.cryptoseal.R
+import app.cryptoseal.tabs.packages.PackageItem
+import java.io.ByteArrayOutputStream
+import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreatorTab(viewModel: PackagesViewModel) {
+fun CreatorTab(
+    creatorViewModel: CreatorViewModel = viewModel(),
+    packagesViewModel: PackagesViewModel? = null
+) {
+    val context = LocalContext.current
+
+    val contacts by creatorViewModel.contacts.collectAsState()
+    val isLoadingContacts by creatorViewModel.isLoadingContacts.collectAsState()
+    val createOrderResult by creatorViewModel.createOrderResult.collectAsState()
+    val isCreatingOrder by creatorViewModel.isCreatingOrder.collectAsState()
+
+    LaunchedEffect(Unit) {
+        creatorViewModel.loadContacts()
+    }
+
     var shipmentName by remember { mutableStateOf("") }
-    var receiver by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var comment by remember { mutableStateOf("") }
+    var selectedContact by remember { mutableStateOf<ContactDisplay?>(null) }
+    var contactSearchQuery by remember { mutableStateOf("") }
+    var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-// State for the contacts dropdown
     var receiverExpanded by remember { mutableStateOf(false) }
-    val contacts = listOf("Elena Rostova", "Marcus Vance", "Sarah Jenkins")
-
-    var generatedOrderId by remember { mutableStateOf<String?>(null) }
-
-// We are keeping the "Sheet" naming convention as requested,
-// but implementing it via Dialog for usability
+    var showImageSourceDialog by remember { mutableStateOf(false) }
     var showQrSheet by remember { mutableStateOf(false) }
 
-    val scrollState = rememberScrollState()
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    var qrBitmapToSave by remember { mutableStateOf<Bitmap?>(null) }
+
+    val saveQrLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocumentWithName("image/*")
+    ) { uri ->
+        uri?.let {
+            qrBitmapToSave?.let { bitmap ->
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                    }
+                    android.widget.Toast.makeText(context, "QR saved", android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Failed to save", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            photoUri?.let { uri ->
+                selectedBitmap = loadBitmapFromUri(context, uri)
+            }
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            selectedBitmap = loadBitmapFromUri(context, it)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val file = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            photoUri = uri
+            cameraLauncher.launch(uri)
+        }
+    }
+
+    fun launchCamera() {
+        val permission = Manifest.permission.CAMERA
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+            val file = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            photoUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(permission)
+        }
+    }
+
+    val filteredContacts = remember(contactSearchQuery, contacts) {
+        if (contactSearchQuery.isBlank()) {
+            contacts
+        } else {
+            contacts.filter { it.email.contains(contactSearchQuery, ignoreCase = true) }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .verticalScroll(scrollState),
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // --- 1. Shipment Name ---
         OutlinedTextField(
             value = shipmentName,
             onValueChange = { shipmentName = it },
-            label = { Text("Shipment Name") },
+            label = { Text("Name") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- 2. Sender (Read-only / Grayed out) ---
         OutlinedTextField(
-            value = "EMP-8492 (You)",
+            value = ApiService.currentUser?.email ?: "Loading...",
             onValueChange = { },
             label = { Text("Sender") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = false, // Grays out the field
+            enabled = false,
             colors = OutlinedTextFieldDefaults.colors(
                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
                 disabledBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
@@ -99,46 +200,71 @@ fun CreatorTab(viewModel: PackagesViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- 3. Receiver (Dropdown from Contacts) ---
-        Box(modifier = Modifier.fillMaxWidth()) {
+        ExposedDropdownMenuBox(
+            expanded = receiverExpanded,
+            onExpandedChange = { receiverExpanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
             OutlinedTextField(
-                value = receiver,
-                onValueChange = { },
+                value = contactSearchQuery,
+                onValueChange = {
+                    contactSearchQuery = it
+                    if (selectedContact != null && !selectedContact!!.email.contains(it, ignoreCase = true)) {
+                        selectedContact = null
+                    }
+                },
                 label = { Text("Receiver") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                readOnly = false,
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
                 trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Select Receiver",
-                        modifier = Modifier.clickable { receiverExpanded = true }
-                    )
-                }
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = receiverExpanded)
+                },
+                isError = selectedContact == null && shipmentName.isNotBlank()
             )
-            DropdownMenu(
-                expanded = receiverExpanded,
-                onDismissRequest = { receiverExpanded = false },
-                modifier = Modifier.fillMaxWidth(0.9f)
-            ) {
-                contacts.forEach { contact ->
-                    DropdownMenuItem(
-                        text = { Text(contact) },
-                        onClick = {
-                            receiver = contact
-                            receiverExpanded = false
+
+            if (isLoadingContacts) {
+                DropdownMenuItem(
+                    text = { CircularProgressIndicator(modifier = Modifier.size(20.dp)) },
+                    onClick = { }
+                )
+            } else {
+                ExposedDropdownMenu(
+                    expanded = receiverExpanded,
+                    onDismissRequest = { receiverExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.95f)
+                ) {
+                    if (filteredContacts.isEmpty() && contactSearchQuery.isNotBlank()) {
+                        DropdownMenuItem(
+                            text = { Text("No contacts found") },
+                            onClick = { }
+                        )
+                    } else {
+                        filteredContacts.forEach { contact ->
+                            DropdownMenuItem(
+                                text = { Text(contact.email) },
+                                onClick = {
+                                    selectedContact = contact
+                                    contactSearchQuery = contact.email
+                                    receiverExpanded = false
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- 4. Description (Bigger Box) ---
         OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text("Description") },
+            value = comment,
+            onValueChange = { comment = it },
+            label = { Text("Comment") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp),
@@ -147,77 +273,153 @@ fun CreatorTab(viewModel: PackagesViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- 5. Image Submission Placeholder ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(150.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    RoundedCornerShape(8.dp)
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 )
                 .border(
                     1.dp,
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     RoundedCornerShape(8.dp)
                 )
-                .clickable { /* TODO: Launch camera/gallery */ },
+                .clickable { showImageSourceDialog = true },
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.AddPhotoAlternate,
-                    contentDescription = "Add Photo",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
+            if (selectedBitmap != null) {
+                Image(
+                    bitmap = selectedBitmap!!.asImageBitmap(),
+                    contentDescription = "Selected Photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Tap to add package photo",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.AddPhotoAlternate,
+                        contentDescription = "Add Photo",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tap to add package photo",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- 6. Generate Button ---
         Button(
             onClick = {
-                generatedOrderId = viewModel.createAndAddPackage(
-                    name = shipmentName,
-                    routingInfo = receiver,
-                    manifestData = description
-                )
-                showQrSheet = true
+                selectedContact?.let { contact ->
+                    val photoMeta = selectedBitmap?.let { bitmap ->
+                        val baos = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                        val bytes = baos.toByteArray()
+                        android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    } ?: ""
+                    creatorViewModel.createOrder(
+                        receiverId = contact.contactId,
+                        name = shipmentName,
+                        meta = photoMeta,
+                        comment = comment
+                    )
+                    showQrSheet = true
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(56.dp),
+            enabled = selectedContact != null && shipmentName.isNotBlank() && !isCreatingOrder
         ) {
-            Text("Generate QR Code", fontWeight = FontWeight.Bold)
+            if (isCreatingOrder) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Text("Generate QR Code", fontWeight = FontWeight.Bold)
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
     }
 
-    // --- 7. The Modal "Sheet" (Dialog) ---
-    if (showQrSheet && generatedOrderId != null) {
+    if (showImageSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showImageSourceDialog = false },
+            title = { Text("Select Photo Source") },
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                showImageSourceDialog = false
+                                launchCamera()
+                            }
+                            .padding(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Camera",
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Camera")
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable {
+                                showImageSourceDialog = false
+                                galleryLauncher.launch("image/*")
+                            }
+                            .padding(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Photo,
+                            contentDescription = "Gallery",
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Gallery")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showImageSourceDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showQrSheet && createOrderResult != null) {
         Dialog(
             onDismissRequest = {
                 showQrSheet = false
-                shipmentName = ""
-                receiver = ""
-                description = ""
+                qrBitmapToSave = null
+                creatorViewModel.clearCreateResult()
             },
-            // This is the magic line that lets the dialog expand
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f) // Takes up 90% of the screen width
-                    .padding(vertical = 32.dp), // Gives it room to breathe vertically
-                shape = RoundedCornerShape(24.dp), // Slightly rounder corners for a larger card
+                    .fillMaxWidth(0.9f)
+                    .padding(vertical = 32.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -225,71 +427,150 @@ fun CreatorTab(viewModel: PackagesViewModel) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp), // Increased inner padding
+                        .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Shipment Ready",
-                        style = MaterialTheme.typography.headlineSmall, // Made the title larger
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Print this code and ship your package.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    when (val result = createOrderResult) {
+                        is CreateOrderResult.Success -> {
+                            LaunchedEffect(result) {
+                                packagesViewModel?.addPackage(
+                                    PackageItem(
+                                        id = result.order.id.toString(),
+                                        name = result.order.name,
+                                        status = "Ready for transit",
+                                        isSentByMe = true
+                                    )
+                                )
+                            }
+                            Text(
+                                text = "Shipment Ready",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Order ID: ${result.order.id}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .size(280.dp)
-                            .background(Color.White, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.demo_qr),
-                            contentDescription = "Generated QR Code",
-                            modifier = Modifier.size(240.dp)
-                        )
-                    }
+                            Box(
+                                modifier = Modifier
+                                    .size(280.dp)
+                                    .background(Color.White, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = result.qrBitmap.asImageBitmap(),
+                                    contentDescription = "Generated QR Code",
+                                    modifier = Modifier.size(240.dp)
+                                )
+                            }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
 
-                    Text(
-                        text = "ID: $generatedOrderId",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                            Text(
+                                text = "ID: ${result.order.id}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        TextButton(
-                            onClick = { /* TODO: Print logic */ },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Print", style = MaterialTheme.typography.titleMedium)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        (createOrderResult as? CreateOrderResult.Success)?.let { result ->
+                                            qrBitmapToSave = result.qrBitmap
+                                            saveQrLauncher.launch("QR_${result.order.id}.png")
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Save", style = MaterialTheme.typography.titleMedium)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        shipmentName = ""
+                                        comment = ""
+                                        selectedContact = null
+                                        contactSearchQuery = ""
+                                        selectedBitmap = null
+                                        showQrSheet = false
+                                        creatorViewModel.clearCreateResult()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Done", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
                         }
-                        Button(
-                            onClick = {
-                                showQrSheet = false
-                                shipmentName = ""
-                                receiver = ""
-                                description = ""
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Done", style = MaterialTheme.typography.titleMedium)
+                        is CreateOrderResult.Error -> {
+                            Text(
+                                text = "Error",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = result.message,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(
+                                onClick = {
+                                    showQrSheet = false
+                                    creatorViewModel.clearCreateResult()
+                                }
+                            ) {
+                                Text("Close")
+                            }
                         }
+                        null -> { }
                     }
                 }
             }
         }
     }
+}
+
+private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? {
+    return try {
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                android.graphics.ImageDecoder.decodeBitmap(
+                    android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+                ) { decoder, _, _ ->
+                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.isMutableRequired = true
+                }
+            } else {
+                BitmapFactory.decodeStream(inputStream)
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private class CreateDocumentWithName(mimeType: String) : androidx.activity.result.contract.ActivityResultContract<String, android.net.Uri?>() {
+    private val mimeType_ = mimeType
+    override fun createIntent(context: android.content.Context, input: String) =
+        android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            type = mimeType_
+            putExtra(android.content.Intent.EXTRA_TITLE, input)
+        }
+    override fun parseResult(resultCode: Int, intent: android.content.Intent?) =
+        if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
 }
