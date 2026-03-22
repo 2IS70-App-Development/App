@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.cryptoseal.data.api.ApiService
+import app.cryptoseal.data.model.User
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -53,6 +56,7 @@ fun ProfileTab(onLogout: () -> Unit) {
     val currentUser = ApiService.currentUser
     var contacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var showAddContactDialog by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -76,6 +80,17 @@ fun ProfileTab(onLogout: () -> Unit) {
 
     LaunchedEffect(Unit) {
         loadContacts()
+    }
+
+    if (showAddContactDialog) {
+        AddContactDialog(
+            currentUserId = currentUser?.id,
+            onDismiss = { showAddContactDialog = false },
+            onContactAdded = {
+                showAddContactDialog = false
+                loadContacts()
+            }
+        )
     }
 
     LazyColumn(
@@ -206,7 +221,7 @@ fun ProfileTab(onLogout: () -> Unit) {
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Button(onClick = { /* TODO: Add contact dialog */ }) {
+                    Button(onClick = { showAddContactDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Contact")
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Add")
@@ -274,6 +289,114 @@ fun ContactListItem(contact: Contact, onRemove: () -> Unit) {
                     tint = MaterialTheme.colorScheme.error
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AddContactDialog(
+    currentUserId: Int?,
+    onDismiss: () -> Unit,
+    onContactAdded: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var users by remember { mutableStateOf<List<User>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var selectedUser by remember { mutableStateOf<User?>(null) }
+    var isAdding by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        ApiService.getUsers().fold(
+            onSuccess = { userList ->
+                users = userList.filter { it.id != currentUserId }
+            },
+            onFailure = { }
+        )
+        isLoading = false
+    }
+
+    val filteredUsers = remember(searchQuery, users) {
+        if (searchQuery.isBlank()) {
+            emptyList()
+        } else {
+            users.filter { it.email.contains(searchQuery, ignoreCase = true) }
+                .take(5)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Contact") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        selectedUser = null
+                    },
+                    label = { Text("Search by email") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isAdding
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else if (filteredUsers.isEmpty() && searchQuery.isNotBlank()) {
+                    Text(
+                        text = "No users found",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    filteredUsers.forEach { user ->
+                        Card(
+                            onClick = { selectedUser = user },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (user == selectedUser)
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Text(
+                                text = user.email,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (isAdding) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Button(onClick = onDismiss, enabled = !isAdding) {
+                Text("Cancel")
+            }
+        }
+    )
+
+    LaunchedEffect(selectedUser) {
+        selectedUser?.let { user ->
+            isAdding = true
+            ApiService.addContact(user.id).fold(
+                onSuccess = { onContactAdded() },
+                onFailure = {
+                    isAdding = false
+                    selectedUser = null
+                    searchQuery = ""
+                }
+            )
         }
     }
 }
