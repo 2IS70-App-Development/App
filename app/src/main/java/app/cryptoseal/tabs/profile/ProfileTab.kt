@@ -46,7 +46,7 @@ import app.cryptoseal.data.api.ApiService
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
-data class Contact(val id: Int, val email: String)
+data class Contact(val contactId: Int, val email: String)
 
 @Composable
 fun ProfileTab(onLogout: () -> Unit) {
@@ -56,17 +56,26 @@ fun ProfileTab(onLogout: () -> Unit) {
 
     val scope = rememberCoroutineScope()
 
-    //TODO use contacts when support for contacts is added in the backend
-    LaunchedEffect(Unit) {
+    fun loadContacts() {
         scope.launch {
-            ApiService.getUsers().fold(
-                onSuccess = { users ->
-                    contacts = users.map { Contact(it.id, it.email) }
+            isLoading = true
+            ApiService.getContacts().fold(
+                onSuccess = { contactList ->
+                    val displays = contactList.mapNotNull { contact ->
+                        ApiService.getUserDetails(contact.contactId).getOrNull()?.let { user ->
+                            Contact(contact.contactId, user.email)
+                        }
+                    }
+                    contacts = displays
                 },
-                onFailure = { }
+                onFailure = { contacts = emptyList() }
             )
             isLoading = false
         }
+    }
+
+    LaunchedEffect(Unit) {
+        loadContacts()
     }
 
     LazyColumn(
@@ -197,7 +206,7 @@ fun ProfileTab(onLogout: () -> Unit) {
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Button(onClick = { /* TODO: Add contact logic */ }) {
+                    Button(onClick = { /* TODO: Add contact dialog */ }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Contact")
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Add")
@@ -219,14 +228,19 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         } else {
             items(contacts) { contact ->
-                ContactListItem(contact = contact)
+                ContactListItem(
+                    contact = contact,
+                    onRemove = { loadContacts() }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ContactListItem(contact: Contact) {
+fun ContactListItem(contact: Contact, onRemove: () -> Unit) {
+    val scope = rememberCoroutineScope()
+
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -249,7 +263,11 @@ fun ContactListItem(contact: Contact) {
                 )
             }
 
-            IconButton(onClick = { /* TODO: Remove contact logic */ }) {
+            IconButton(onClick = {
+                scope.launch {
+                    ApiService.removeContact(contact.contactId).onSuccess { onRemove() }
+                }
+            }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Delete Contact",

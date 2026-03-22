@@ -80,3 +80,15 @@ data class AuthResponse(
 data class ErrorResponse(
     val error: String
 )
+
+data class Contact(
+    @SerializedName("owner_id")
+    val ownerId: Int,
+    @SerializedName("contact_id")
+    val contactId: Int
+)
+
+data class ContactIdRequest(
+    @SerializedName("contact_id")
+    val contactId: Int
+)

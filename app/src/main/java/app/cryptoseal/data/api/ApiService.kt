@@ -307,4 +307,84 @@ object ApiService {
         val photoBase64 = Base64.encodeToString(photoBytes, Base64.NO_WRAP)
         return createOrderScan(orderId, photoBase64, condition, longitude, latitude, comment)
     }
+
+    suspend fun getContacts(): Result<List<Contact>> = withContext(Dispatchers.IO) {
+        try {
+            val conn = authenticatedConnection("/auth/contacts", "GET")
+            val response = conn.inputStream.bufferedReader().readText()
+            when (conn.responseCode) {
+                HttpsURLConnection.HTTP_OK -> {
+                    Result.success(gson.fromJson(response, Array<Contact>::class.java).toList())
+                }
+                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
+                    Result.failure(Exception("Unauthorized"))
+                }
+                else -> {
+                    Result.failure(Exception("Failed to fetch contacts"))
+                }
+            }.also { conn.disconnect() }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addContact(contactId: Int): Result<Contact> = withContext(Dispatchers.IO) {
+        try {
+            val conn = authenticatedConnection("/auth/contacts", "POST")
+            conn.doOutput = true
+
+            val request = ContactIdRequest(contactId)
+            OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
+
+            val response = conn.inputStream.bufferedReader().readText()
+            when (conn.responseCode) {
+                HttpsURLConnection.HTTP_OK, HttpsURLConnection.HTTP_CREATED -> {
+                    Result.success(gson.fromJson(response, Contact::class.java))
+                }
+                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
+                    Result.failure(Exception("Unauthorized"))
+                }
+                else -> {
+                    val error = try {
+                        gson.fromJson(response, ErrorResponse::class.java).error
+                    } catch (e: Exception) {
+                        "Failed to add contact"
+                    }
+                    Result.failure(Exception(error))
+                }
+            }.also { conn.disconnect() }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeContact(contactId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val conn = authenticatedConnection("/auth/contacts", "DELETE")
+            conn.doOutput = true
+
+            val request = ContactIdRequest(contactId)
+            OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
+
+            when (conn.responseCode) {
+                HttpsURLConnection.HTTP_NO_CONTENT, HttpsURLConnection.HTTP_OK -> {
+                    Result.success(Unit)
+                }
+                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
+                    Result.failure(Exception("Unauthorized"))
+                }
+                else -> {
+                    val response = conn.inputStream.bufferedReader().readText()
+                    val error = try {
+                        gson.fromJson(response, ErrorResponse::class.java).error
+                    } catch (e: Exception) {
+                        "Failed to remove contact"
+                    }
+                    Result.failure(Exception(error))
+                }
+            }.also { conn.disconnect() }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
