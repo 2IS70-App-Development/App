@@ -39,6 +39,18 @@ data class Scan(
     val createdAt: String
 )
 
+data class Activity(
+    val id: Int,
+    @SerializedName("actor_id")
+    val actorId: Int,
+    @SerializedName("user_id")
+    val userId: Int,
+    val type: String,
+    val summary: String,
+    @SerializedName("created_at")
+    val createdAt: String
+)
+
 data class CreateOrderRequest(
     @SerializedName("receiver_id")
     val receiverId: Int,

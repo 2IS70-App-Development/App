@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import app.cryptoseal.BottomNavItem
 import app.cryptoseal.tabs.PackagesViewModel
 import app.cryptoseal.tabs.activity.ActivityTab
+import app.cryptoseal.tabs.activity.ActivityViewModel
 import app.cryptoseal.tabs.creator.CreatorTab
 import app.cryptoseal.tabs.packages.PackagesTab
 import app.cryptoseal.tabs.profile.ProfileTab
@@ -107,7 +108,8 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
             PackagesTab(viewModel = sharedPackagesViewModel)
         }
         composable(BottomNavItem.Activity.route) {
-            ActivityTab()
+            val activityViewModel: ActivityViewModel = viewModel()
+            ActivityTab(viewModel = activityViewModel)
         }
         composable(BottomNavItem.Creator.route) {
             CreatorTab(

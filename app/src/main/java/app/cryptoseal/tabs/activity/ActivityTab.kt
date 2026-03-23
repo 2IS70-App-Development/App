@@ -15,78 +15,101 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.AddBox
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.cryptoseal.data.model.Activity
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-// Simple data model for the UI placeholder
-data class ActivityEvent(
-val id: String,
-val description: String,
-val timestamp: String,
-val location: String,
-val type: ActivityType
-)
-
-enum class ActivityType { SCANNED, DELIVERED, CREATED }
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ActivityTab() {
-// Dummy data to simulate the "Real-time feed" described in app.md
-val events = listOf(
-ActivityEvent("1", "Package #102 delivered to recipient", "Today, 10:42 AM", "Berlin, DE", ActivityType.DELIVERED),
-ActivityEvent("2", "Package #102 scanned by Courier", "Today, 08:15 AM", "Hamburg, DE", ActivityType.SCANNED),
-ActivityEvent("3", "Shipment #103 created by Logistics", "Yesterday, 04:30 PM", "Rotterdam, NL", ActivityType.CREATED),
-ActivityEvent("4", "Inbound Machinery scanned at Hub", "Yesterday, 02:15 PM", "Rotterdam, NL", ActivityType.SCANNED)
-)
+fun ActivityTab(viewModel: ActivityViewModel) {
+    val activities by viewModel.activities.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    PullToRefreshBox(
+        isRefreshing = isLoading,
+        onRefresh = { viewModel.refreshActivities() },
+        modifier = Modifier.fillMaxSize()
     ) {
-        // Section Title
-        item {
-            Text(
-                text = "Recent Activity",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Section Title
+            item {
+                Text(
+                    text = "Recent Activity",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
 
-        // The list of events
-        items(events) { event ->
-            ActivityItem(event)
+            if (activities.isEmpty() && !isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No activities yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // The list of events
+            items(activities) { activity ->
+                ActivityItem(activity)
+            }
         }
     }
 }
 
 @Composable
-fun ActivityItem(event: ActivityEvent) {
-Row(
-modifier = Modifier
-.fillMaxWidth()
-.padding(vertical = 4.dp),
-verticalAlignment = Alignment.CenterVertically
-) {
-// 1. Leading Icon (Event Type)
-val (icon, color) = when (event.type) {
-ActivityType.DELIVERED -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
-ActivityType.SCANNED -> Icons.Default.LocationOn to MaterialTheme.colorScheme.secondary
-ActivityType.CREATED -> Icons.Default.ShoppingCart to MaterialTheme.colorScheme.tertiary
-}
+fun ActivityItem(activity: Activity) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 1. Leading Icon (Event Type)
+        val (icon, color) = when (activity.type) {
+            "order_created" -> Icons.Default.AddBox to MaterialTheme.colorScheme.primary
+            "order_received" -> Icons.Default.Inbox to MaterialTheme.colorScheme.secondary
+            "status_changed" -> Icons.Default.Edit to MaterialTheme.colorScheme.tertiary
+            "scan_created" -> Icons.Default.QrCodeScanner to Color(0xFF03A9F4) // Info-like color
+            "scan_added" -> Icons.Default.LibraryAdd to Color(0xFF4CAF50) // Success-like color
+            else -> Icons.Default.Notifications to MaterialTheme.colorScheme.outline
+        }
 
         Box(
             modifier = Modifier
@@ -107,22 +130,32 @@ ActivityType.CREATED -> Icons.Default.ShoppingCart to MaterialTheme.colorScheme.
         // 2. Text Details
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = event.description,
+                text = activity.summary,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "${event.timestamp} • ${event.location}",
+                text = formatIsoDate(activity.createdAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 
-    // 3. Subtle Divider (app.md requirement)
+    // 3. Subtle Divider
     HorizontalDivider(
         modifier = Modifier.padding(start = 56.dp, top = 12.dp),
         thickness = 1.dp,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     )
+}
+
+fun formatIsoDate(isoString: String): String {
+    return try {
+        val parsed = ZonedDateTime.parse(isoString)
+        val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy • hh:mm a", Locale.getDefault())
+        parsed.format(formatter)
+    } catch (e: Exception) {
+        isoString
+    }
 }

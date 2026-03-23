@@ -3,6 +3,7 @@ package app.cryptoseal.data.api
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import app.cryptoseal.data.model.Activity
 import app.cryptoseal.data.model.AuthResponse
 import app.cryptoseal.data.model.Contact
 import app.cryptoseal.data.model.ContactIdRequest
@@ -354,6 +355,26 @@ object ApiService {
                 Result.success(Unit)
             } else {
                 Result.failure(Exception(parseError(response, "Failed to remove contact")))
+            }.also { conn.disconnect() }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.message ?: "Network error"))
+        }
+    }
+
+    suspend fun getActivities(): Result<List<Activity>> = withContext(Dispatchers.IO) {
+        try {
+            val conn = authenticatedConnection("/auth/activities", "GET")
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Array<Activity>::class.java).toList())
+            } else {
+                val msg = if (responseCode == 401) "Unauthorized" else parseError(
+                    response,
+                    "Failed to fetch activities"
+                )
+                Result.failure(Exception(msg))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
             Result.failure(Exception(e.message ?: "Network error"))
