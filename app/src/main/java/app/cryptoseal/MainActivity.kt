@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.feature.auth.LoginScreen
 import app.cryptoseal.feature.dashboard.DashboardScreen
 
@@ -33,10 +34,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CryptoSealNavGraph() {
     val navController = rememberNavController()
+    val startDestination = if (ApiService.isLoggedIn()) Screen.Dashboard.route else Screen.Login.route
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route
+        startDestination = startDestination
     ) {
         // Login Screen Destination
         composable(route = Screen.Login.route) {

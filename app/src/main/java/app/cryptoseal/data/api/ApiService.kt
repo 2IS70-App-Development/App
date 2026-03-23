@@ -1,5 +1,6 @@
 package app.cryptoseal.data.api
 
+import android.content.Context
 import android.util.Base64
 import app.cryptoseal.data.model.*
 import com.google.gson.Gson
@@ -13,6 +14,13 @@ import javax.net.ssl.HttpsURLConnection
 object ApiService {
     private const val BASE_URL = "http://10.0.2.2:8080"
     private val gson = Gson()
+    private var sessionManager: SessionManager? = null
+
+    fun initialize(context: Context) {
+        sessionManager = SessionManager(context)
+        authToken = sessionManager?.authToken
+        currentUser = sessionManager?.currentUser
+    }
 
     var authToken: String? = null
         private set
@@ -74,6 +82,7 @@ object ApiService {
             if (responseCode == HttpsURLConnection.HTTP_OK) {
                 val authResponse = gson.fromJson(response, AuthResponse::class.java)
                 authToken = authResponse.accessToken
+                sessionManager?.authToken = authToken
                 fetchCurrentUser(email)
                 Result.success(authResponse.accessToken)
             } else {
@@ -87,12 +96,14 @@ object ApiService {
     private suspend fun fetchCurrentUser(email: String) {
         getUsers().onSuccess { users ->
             currentUser = users.find { it.email == email }
+            sessionManager?.currentUser = currentUser
         }
     }
 
     fun logout() {
         authToken = null
         currentUser = null
+        sessionManager?.clear()
     }
 
     fun isLoggedIn(): Boolean = authToken != null

@@ -5,11 +5,7 @@ plugins {
 
 android {
     namespace = "app.cryptoseal"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.cryptoseal"
@@ -68,7 +64,6 @@ dependencies {
 
     // Google ML Kit for reading the QR Code
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // More icons
     implementation("androidx.compose.material:material-icons-extended")
@@ -78,4 +73,7 @@ dependencies {
 
     // QR code generation
     implementation("com.google.zxing:core:3.5.3")
+
+    // Secure Storage
+    implementation("androidx.security:security-crypto:1.1.0")
 }
