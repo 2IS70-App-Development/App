@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class ContactDisplay(
-    val contactId: Int,
+data class UserDisplay(
+    val id: Int,
     val email: String
 )
 
@@ -27,11 +27,11 @@ sealed class CreateOrderResult {
 
 class CreatorViewModel : ViewModel() {
 
-    private val _contacts = MutableStateFlow<List<ContactDisplay>>(emptyList())
-    val contacts: StateFlow<List<ContactDisplay>> = _contacts.asStateFlow()
+    private val _users = MutableStateFlow<List<UserDisplay>>(emptyList())
+    val users: StateFlow<List<UserDisplay>> = _users.asStateFlow()
 
-    private val _isLoadingContacts = MutableStateFlow(false)
-    val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
+    private val _isLoadingUsers = MutableStateFlow(false)
+    val isLoadingUsers: StateFlow<Boolean> = _isLoadingUsers.asStateFlow()
 
     private val _createOrderResult = MutableStateFlow<CreateOrderResult?>(null)
     val createOrderResult: StateFlow<CreateOrderResult?> = _createOrderResult.asStateFlow()
@@ -39,21 +39,19 @@ class CreatorViewModel : ViewModel() {
     private val _isCreatingOrder = MutableStateFlow(false)
     val isCreatingOrder: StateFlow<Boolean> = _isCreatingOrder.asStateFlow()
 
-    fun loadContacts() {
+    fun loadAllUsers() {
         viewModelScope.launch {
-            _isLoadingContacts.value = true
-            ApiService.getContacts().fold(
-                onSuccess = { contactList ->
-                    val displays = contactList.mapNotNull { contact ->
-                        ApiService.getUserDetails(contact.contactId).getOrNull()?.let { user ->
-                            ContactDisplay(contact.contactId, user.email)
-                        }
-                    }
-                    _contacts.value = displays
+            _isLoadingUsers.value = true
+            ApiService.getUsers().fold(
+                onSuccess = { userList ->
+                    val currentUser = ApiService.currentUser
+                    _users.value = userList
+                        .filter { it.id != currentUser?.id }
+                        .map { UserDisplay(it.id, it.email) }
                 },
-                onFailure = { _contacts.value = emptyList() }
+                onFailure = { _users.value = emptyList() }
             )
-            _isLoadingContacts.value = false
+            _isLoadingUsers.value = false
         }
     }
 
@@ -61,13 +59,14 @@ class CreatorViewModel : ViewModel() {
         receiverId: Int,
         name: String,
         meta: String,
-        comment: String
+        comment: String,
+        photoBase64: String?
     ) {
         viewModelScope.launch {
             _isCreatingOrder.value = true
             _createOrderResult.value = null
 
-            ApiService.createOrder(receiverId, name, meta, comment).fold(
+            ApiService.createOrder(receiverId, name, meta, comment, photoBase64).fold(
                 onSuccess = { order ->
                     val qrBitmap = withContext(Dispatchers.Default) {
                         generateQrBitmap(order.id.toString())

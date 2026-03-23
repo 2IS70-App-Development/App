@@ -24,12 +24,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.cryptoseal.BottomNavItem
+import app.cryptoseal.tabs.PackagesViewModel
 import app.cryptoseal.tabs.activity.ActivityTab
 import app.cryptoseal.tabs.creator.CreatorTab
-import app.cryptoseal.tabs.scanner.ScannerTab
-import app.cryptoseal.tabs.PackagesViewModel
 import app.cryptoseal.tabs.packages.PackagesTab
 import app.cryptoseal.tabs.profile.ProfileTab
+import app.cryptoseal.tabs.scanner.ScannerTab
 
 @Composable
 fun DashboardScreen(onLogout: () -> Unit) {
@@ -46,7 +46,6 @@ fun DashboardScreen(onLogout: () -> Unit) {
 
 @Composable
 fun CryptoSealBottomNavigationBar(navController: NavHostController) {
-    // 1. Updated list of tabs
     val items = listOf(
         BottomNavItem.Packages,
         BottomNavItem.Activity,
@@ -62,7 +61,6 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
         val currentRoute = navBackStackEntry?.destination?.route
 
         items.forEach { item ->
-            // 2. Updated Icon Logic
             val icon = when (item) {
                 BottomNavItem.Packages -> Icons.Default.Home
                 BottomNavItem.Activity -> Icons.Default.Notifications
@@ -103,9 +101,8 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
 
     NavHost(
         navController = navController,
-        startDestination = BottomNavItem.Packages.route // New Start Destination
+        startDestination = BottomNavItem.Packages.route
     ) {
-        // 3. Updated Graph Destinations
         composable(BottomNavItem.Packages.route) {
             PackagesTab(viewModel = sharedPackagesViewModel)
         }
@@ -115,7 +112,16 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
         composable(BottomNavItem.Creator.route) {
             CreatorTab(
                 creatorViewModel = viewModel(),
-                packagesViewModel = sharedPackagesViewModel
+                packagesViewModel = sharedPackagesViewModel,
+                onFinish = {
+                    navController.navigate(BottomNavItem.Packages.route) {
+                        navController.graph.startDestinationRoute?.let { route ->
+                            popUpTo(route) { saveState = true }
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             )
         }
         composable(BottomNavItem.Scanner.route) {

@@ -19,6 +19,7 @@ data class Order(
     val status: String,
     val meta: String,
     val comment: String,
+    val photo: String? = null,
     @SerializedName("created_at")
     val createdAt: String
 )
@@ -42,7 +43,8 @@ data class CreateOrderRequest(
     val receiverId: Int,
     val name: String,
     val meta: String,
-    val comment: String
+    val comment: String,
+    val photo: String? = null
 )
 
 data class UpdateOrderStatusRequest(

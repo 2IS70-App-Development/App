@@ -68,7 +68,6 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.tabs.PackagesViewModel
-import app.cryptoseal.tabs.packages.PackageItem
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -76,23 +75,24 @@ import java.io.File
 @Composable
 fun CreatorTab(
     creatorViewModel: CreatorViewModel = viewModel(),
-    packagesViewModel: PackagesViewModel? = null
+    packagesViewModel: PackagesViewModel? = null,
+    onFinish: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    val contacts by creatorViewModel.contacts.collectAsState()
-    val isLoadingContacts by creatorViewModel.isLoadingContacts.collectAsState()
+    val users by creatorViewModel.users.collectAsState()
+    val isLoadingUsers by creatorViewModel.isLoadingUsers.collectAsState()
     val createOrderResult by creatorViewModel.createOrderResult.collectAsState()
     val isCreatingOrder by creatorViewModel.isCreatingOrder.collectAsState()
 
     LaunchedEffect(Unit) {
-        creatorViewModel.loadContacts()
+        creatorViewModel.loadAllUsers()
     }
 
     var shipmentName by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
-    var selectedContact by remember { mutableStateOf<ContactDisplay?>(null) }
-    var contactSearchQuery by remember { mutableStateOf("") }
+    var selectedUser by remember { mutableStateOf<UserDisplay?>(null) }
+    var userSearchQuery by remember { mutableStateOf("") }
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     var receiverExpanded by remember { mutableStateOf(false) }
@@ -101,6 +101,18 @@ fun CreatorTab(
 
     var photoUri by remember { mutableStateOf<Uri?>(null) }
     var qrBitmapToSave by remember { mutableStateOf<Bitmap?>(null) }
+
+    // Helper to clear form and navigate back
+    val resetFormAndFinish = {
+        shipmentName = ""
+        comment = ""
+        selectedUser = null
+        userSearchQuery = ""
+        selectedBitmap = null
+        showQrSheet = false
+        creatorViewModel.clearCreateResult()
+        onFinish()
+    }
 
     val saveQrLauncher = rememberLauncherForActivityResult(
         contract = CreateDocumentWithName("image/*")
@@ -160,11 +172,11 @@ fun CreatorTab(
         }
     }
 
-    val filteredContacts = remember(contactSearchQuery, contacts) {
-        if (contactSearchQuery.isBlank()) {
-            contacts
+    val filteredUsers = remember(userSearchQuery, users) {
+        if (userSearchQuery.isBlank()) {
+            users
         } else {
-            contacts.filter { it.email.contains(contactSearchQuery, ignoreCase = true) }
+            users.filter { it.email.contains(userSearchQuery, ignoreCase = true) }
         }
     }
 
@@ -206,11 +218,15 @@ fun CreatorTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             OutlinedTextField(
-                value = contactSearchQuery,
+                value = userSearchQuery,
                 onValueChange = {
-                    contactSearchQuery = it
-                    if (selectedContact != null && !selectedContact!!.email.contains(it, ignoreCase = true)) {
-                        selectedContact = null
+                    userSearchQuery = it
+                    if (selectedUser != null && !selectedUser!!.email.contains(
+                            it,
+                            ignoreCase = true
+                        )
+                    ) {
+                        selectedUser = null
                     }
                 },
                 label = { Text("Receiver") },
@@ -224,10 +240,10 @@ fun CreatorTab(
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = receiverExpanded)
                 },
-                isError = selectedContact == null && shipmentName.isNotBlank()
+                isError = selectedUser == null && shipmentName.isNotBlank()
             )
 
-            if (isLoadingContacts) {
+            if (isLoadingUsers) {
                 DropdownMenuItem(
                     text = { CircularProgressIndicator(modifier = Modifier.size(20.dp)) },
                     onClick = { }
@@ -238,18 +254,18 @@ fun CreatorTab(
                     onDismissRequest = { receiverExpanded = false },
                     modifier = Modifier.fillMaxWidth(0.95f)
                 ) {
-                    if (filteredContacts.isEmpty() && contactSearchQuery.isNotBlank()) {
+                    if (filteredUsers.isEmpty() && userSearchQuery.isNotBlank()) {
                         DropdownMenuItem(
-                            text = { Text("No contacts found") },
+                            text = { Text("No users found") },
                             onClick = { }
                         )
                     } else {
-                        filteredContacts.forEach { contact ->
+                        filteredUsers.forEach { user ->
                             DropdownMenuItem(
-                                text = { Text(contact.email) },
+                                text = { Text(user.email) },
                                 onClick = {
-                                    selectedContact = contact
-                                    contactSearchQuery = contact.email
+                                    selectedUser = user
+                                    userSearchQuery = user.email
                                     receiverExpanded = false
                                 }
                             )
@@ -264,7 +280,7 @@ fun CreatorTab(
         OutlinedTextField(
             value = comment,
             onValueChange = { comment = it },
-            label = { Text("Comment") },
+            label = { Text("Description") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp),
@@ -317,18 +333,19 @@ fun CreatorTab(
 
         Button(
             onClick = {
-                selectedContact?.let { contact ->
-                    val photoMeta = selectedBitmap?.let { bitmap ->
+                selectedUser?.let { user ->
+                    val photoBase64 = selectedBitmap?.let { bitmap ->
                         val baos = ByteArrayOutputStream()
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
                         val bytes = baos.toByteArray()
                         android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                    } ?: ""
+                    }
                     creatorViewModel.createOrder(
-                        receiverId = contact.contactId,
+                        receiverId = user.id,
                         name = shipmentName,
-                        meta = photoMeta,
-                        comment = comment
+                        meta = "", // meta can be empty as we use photo field
+                        comment = comment,
+                        photoBase64 = photoBase64
                     )
                     showQrSheet = true
                 }
@@ -336,7 +353,7 @@ fun CreatorTab(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            enabled = selectedContact != null && shipmentName.isNotBlank() && !isCreatingOrder
+            enabled = selectedUser != null && shipmentName.isNotBlank() && !isCreatingOrder
         ) {
             if (isCreatingOrder) {
                 CircularProgressIndicator(
@@ -408,11 +425,7 @@ fun CreatorTab(
 
     if (showQrSheet && createOrderResult != null) {
         Dialog(
-            onDismissRequest = {
-                showQrSheet = false
-                qrBitmapToSave = null
-                creatorViewModel.clearCreateResult()
-            },
+            onDismissRequest = resetFormAndFinish,
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Card(
@@ -433,14 +446,7 @@ fun CreatorTab(
                     when (val result = createOrderResult) {
                         is CreateOrderResult.Success -> {
                             LaunchedEffect(result) {
-                                packagesViewModel?.addPackage(
-                                    PackageItem(
-                                        id = result.order.id.toString(),
-                                        name = result.order.name,
-                                        status = "Ready for transit",
-                                        isSentByMe = true
-                                    )
-                                )
+                                packagesViewModel?.refreshPackages()
                             }
                             Text(
                                 text = "Shipment Ready",
@@ -473,9 +479,9 @@ fun CreatorTab(
                             Spacer(modifier = Modifier.height(32.dp))
 
                             Text(
-                                text = "ID: ${result.order.id}",
+                                text = "Name: ${result.order.name}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurface
                             )
 
                             Spacer(modifier = Modifier.height(32.dp))
@@ -497,15 +503,7 @@ fun CreatorTab(
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
-                                    onClick = {
-                                        shipmentName = ""
-                                        comment = ""
-                                        selectedContact = null
-                                        contactSearchQuery = ""
-                                        selectedBitmap = null
-                                        showQrSheet = false
-                                        creatorViewModel.clearCreateResult()
-                                    },
+                                    onClick = resetFormAndFinish,
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text("Done", style = MaterialTheme.typography.titleMedium)

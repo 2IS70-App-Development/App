@@ -2,7 +2,19 @@ package app.cryptoseal.data.api
 
 import android.content.Context
 import android.util.Base64
-import app.cryptoseal.data.model.*
+import android.util.Log
+import app.cryptoseal.data.model.AuthResponse
+import app.cryptoseal.data.model.Contact
+import app.cryptoseal.data.model.ContactIdRequest
+import app.cryptoseal.data.model.CreateOrderRequest
+import app.cryptoseal.data.model.CreateScanRequest
+import app.cryptoseal.data.model.ErrorResponse
+import app.cryptoseal.data.model.LoginRequest
+import app.cryptoseal.data.model.Order
+import app.cryptoseal.data.model.Scan
+import app.cryptoseal.data.model.SignupRequest
+import app.cryptoseal.data.model.UpdateOrderStatusRequest
+import app.cryptoseal.data.model.User
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,6 +24,7 @@ import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
 object ApiService {
+    private const val TAG = "ApiService"
     private const val BASE_URL = "http://10.0.2.2:8080"
     private val gson = Gson()
     private var sessionManager: SessionManager? = null
@@ -106,13 +119,21 @@ object ApiService {
         sessionManager?.clear()
     }
 
-    fun isLoggedIn(): Boolean = authToken != null
+    fun isLoggedIn(): Boolean = (authToken ?: sessionManager?.authToken) != null
 
     private fun authenticatedConnection(path: String, method: String): HttpURLConnection {
+        val currentToken = authToken ?: sessionManager?.authToken
         val url = URL("$BASE_URL$path")
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = method
-        conn.setRequestProperty("Authorization", "Bearer $authToken")
+
+        if (currentToken != null) {
+            conn.setRequestProperty("Authorization", "Bearer $currentToken")
+            Log.d(TAG, "Authenticated request to $path with Bearer token")
+        } else {
+            Log.w(TAG, "Attempting authenticated request to $path but token is NULL")
+        }
+
         conn.setRequestProperty("Content-Type", "application/json")
         return conn
     }
@@ -159,6 +180,7 @@ object ApiService {
             if (responseCode == HttpsURLConnection.HTTP_OK) {
                 Result.success(gson.fromJson(response, Array<Order>::class.java).toList())
             } else {
+                Log.e(TAG, "getOrders failed: code=$responseCode, response=$response")
                 val msg = if (responseCode == 401) "Unauthorized" else parseError(response, "Failed to fetch orders")
                 Result.failure(Exception(msg))
             }.also { conn.disconnect() }
@@ -183,12 +205,18 @@ object ApiService {
         }
     }
 
-    suspend fun createOrder(receiverId: Int, name: String, meta: String = "", comment: String = ""): Result<Order> = withContext(Dispatchers.IO) {
+    suspend fun createOrder(
+        receiverId: Int,
+        name: String,
+        meta: String = "",
+        comment: String = "",
+        photo: String? = null
+    ): Result<Order> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders", "POST")
             conn.doOutput = true
 
-            val request = CreateOrderRequest(receiverId, name, meta, comment)
+            val request = CreateOrderRequest(receiverId, name, meta, comment, photo)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
             val responseCode = conn.responseCode
