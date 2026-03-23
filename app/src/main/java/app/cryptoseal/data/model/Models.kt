@@ -30,6 +30,7 @@ data class Scan(
     val orderId: Int,
     @SerializedName("courier_id")
     val courierId: Int,
+    val photo: String? = null,
     val condition: String,
     val longitude: Float,
     val latitude: Float,

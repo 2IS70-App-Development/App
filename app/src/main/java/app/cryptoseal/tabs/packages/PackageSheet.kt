@@ -1,5 +1,8 @@
 package app.cryptoseal.tabs.packages
 
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,33 +19,49 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-
-// Data model strictly for the timeline events
-data class CustodyEvent(val handlerName: String, val timestamp: String, val location: String)
+import app.cryptoseal.data.model.Scan
+import app.cryptoseal.tabs.PackagesViewModel
 
 @Composable
 fun PackageSheet(
     pkg: PackageItem,
+    viewModel: PackagesViewModel,
     onDismiss: () -> Unit
 ) {
-    // Placeholder chain of custody data
-    val custodyChain = listOf(
-        CustodyEvent("Elena Rostova (Creator)", "Oct 24, 08:30 AM", "Warehouse A"),
-        CustodyEvent("Marcus Vance (Courier)", "Oct 24, 11:15 AM", "Transit Hub"),
-        CustodyEvent("Sarah Jenkins (Receiver)", "Oct 25, 09:40 AM", "Final Destination")
-    )
+    val scans by viewModel.scans.collectAsState()
+    val isScansLoading by viewModel.isScansLoading.collectAsState()
+    val users by viewModel.users.collectAsState()
+
+    LaunchedEffect(pkg.id) {
+        viewModel.fetchScans(pkg.id.toInt())
+    }
+
+    var selectedScanForDetails by remember { mutableStateOf<Scan?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -83,17 +102,44 @@ fun PackageSheet(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                // The Scrollable Timeline
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    itemsIndexed(custodyChain) { index, event ->
-                        TimelineNode(
-                            event = event,
-                            isLast = index == custodyChain.size - 1
+                if (isScansLoading) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (scans.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No scans yet for this package",
+                            style = MaterialTheme.typography.bodyMedium
                         )
+                    }
+                } else {
+                    // The Scrollable Timeline
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        itemsIndexed(scans) { index, scan ->
+                            val courierEmail = users.find { it.id == scan.courierId }?.email
+                                ?: "ID: ${scan.courierId}"
+                            TimelineNode(
+                                scan = scan,
+                                courierEmail = courierEmail,
+                                isLast = index == scans.size - 1,
+                                onShowDetails = { selectedScanForDetails = scan }
+                            )
+                        }
                     }
                 }
 
@@ -109,10 +155,14 @@ fun PackageSheet(
             }
         }
     }
+
+    selectedScanForDetails?.let { scan ->
+        ScanDetailsDialog(scan = scan, onDismiss = { selectedScanForDetails = null })
+    }
 }
 
 @Composable
-fun TimelineNode(event: CustodyEvent, isLast: Boolean) {
+fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetails: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,17 +198,85 @@ fun TimelineNode(event: CustodyEvent, isLast: Boolean) {
                 .weight(1f)
                 .padding(bottom = 24.dp)
         ) {
-            Text(
-                text = event.handlerName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${event.timestamp} • ${event.location}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = scan.condition,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${scan.createdAt} • $courierEmail",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onShowDetails) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Show Scan Details",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Scan Details", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (!scan.photo.isNullOrEmpty()) {
+                    val bitmap = remember(scan.photo) {
+                        try {
+                            val decodedString = Base64.decode(scan.photo, Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    bitmap?.let {
+                        Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = "Scan Photo",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
+
+                Text("Location", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "${scan.latitude}, ${scan.longitude}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                if (scan.comment.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Comment", style = MaterialTheme.typography.labelLarge)
+                    Text(scan.comment, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Dismiss")
+                }
+            }
         }
     }
 }

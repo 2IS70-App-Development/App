@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.cryptoseal.data.api.ApiService
+import app.cryptoseal.data.model.Scan
+import app.cryptoseal.data.model.User
 import app.cryptoseal.tabs.packages.PackageItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,12 +26,32 @@ class PackagesViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Scans state
+    private val _scans = MutableStateFlow<List<Scan>>(emptyList())
+    val scans: StateFlow<List<Scan>> = _scans.asStateFlow()
+
+    private val _isScansLoading = MutableStateFlow(false)
+    val isScansLoading: StateFlow<Boolean> = _isScansLoading.asStateFlow()
+
+    // Users for name mapping
+    private val _users = MutableStateFlow<List<User>>(emptyList())
+    val users: StateFlow<List<User>> = _users.asStateFlow()
+
     init {
         refreshPackages()
+        fetchUsers()
     }
 
     fun setTab(index: Int) {
         _selectedTab.value = index
+    }
+
+    private fun fetchUsers() {
+        viewModelScope.launch {
+            ApiService.getUsers().onSuccess { userList ->
+                _users.value = userList
+            }
+        }
     }
 
     fun refreshPackages() {
@@ -64,6 +86,21 @@ class PackagesViewModel : ViewModel() {
                     _error.value = it.message ?: "Failed to fetch packages"
                 }
             _isLoading.value = false
+        }
+    }
+
+    fun fetchScans(orderId: Int) {
+        viewModelScope.launch {
+            _isScansLoading.value = true
+            _scans.value = emptyList()
+            ApiService.getOrderScans(orderId)
+                .onSuccess { scanList ->
+                    _scans.value = scanList
+                }
+                .onFailure {
+                    Log.e("PackagesViewModel", "Error fetching scans for order $orderId", it)
+                }
+            _isScansLoading.value = false
         }
     }
 

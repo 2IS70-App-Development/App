@@ -119,6 +119,7 @@ fun PackagesTab(
     selectedPackage?.let { pkg ->
         PackageSheet(
             pkg = pkg,
+            viewModel = viewModel,
             onDismiss = { selectedPackage = null }
         )
     }
