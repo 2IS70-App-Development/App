@@ -11,8 +11,9 @@ The person who is at the bottom of the chain is currently is responsible for the
 * Maintain state using ViewModels.
 * Keep the package lists hoisted in a shared ViewModel so that actions in the Creator and Scanner tabs immediately update the UI of the list.
 
-How the files should be organized:  
-app.cryptoseal/  
+How the files should be organized:
+```
+app.cryptoseal/
 ├── MainActivity.kt
 ├── Navigation.kt
 ├── Theme.kt
@@ -36,7 +37,7 @@ app.cryptoseal/
     └── profile/  
         ├── ProfileTab.kt  
         └── ProfileViewModel.kt
-
+```
 
 ### Navigation
 The app features a standard Login screen, requiring a Username and Password, followed by a main dashboard utilizing a Bottom Navigation Bar with five distinct tabs.

@@ -11,7 +11,7 @@ import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
 object ApiService {
-    private const val BASE_URL = "http://192.168.240.1:8089"
+    private const val BASE_URL = "http://10.0.2.2:8080"
     private val gson = Gson()
 
     var authToken: String? = null
@@ -19,6 +19,19 @@ object ApiService {
 
     var currentUser: User? = null
         private set
+
+    private fun readResponse(conn: HttpURLConnection): String {
+        val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+        return stream?.bufferedReader()?.use { it.readText() } ?: ""
+    }
+
+    private fun parseError(response: String, defaultMessage: String): String {
+        return try {
+            gson.fromJson(response, ErrorResponse::class.java).error
+        } catch (e: Exception) {
+            defaultMessage
+        }
+    }
 
     suspend fun signup(email: String, password: String): Result<User> = withContext(Dispatchers.IO) {
         try {
@@ -31,22 +44,16 @@ object ApiService {
             val request = SignupRequest(email, password)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK, HttpsURLConnection.HTTP_CREATED -> {
-                    Result.success(gson.fromJson(response, User::class.java))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Signup failed"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+            
+            if (responseCode in 200..299) {
+                Result.success(gson.fromJson(response, User::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "Signup failed")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error during signup"))
         }
     }
 
@@ -61,25 +68,19 @@ object ApiService {
             val request = LoginRequest(email, password)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    val authResponse = gson.fromJson(response, AuthResponse::class.java)
-                    authToken = authResponse.accessToken
-                    fetchCurrentUser(email)
-                    Result.success(authResponse.accessToken)
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Login failed"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                val authResponse = gson.fromJson(response, AuthResponse::class.java)
+                authToken = authResponse.accessToken
+                fetchCurrentUser(email)
+                Result.success(authResponse.accessToken)
+            } else {
+                Result.failure(Exception(parseError(response, "Login failed")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error during login"))
         }
     }
 
@@ -108,84 +109,66 @@ object ApiService {
     suspend fun getUsers(): Result<List<User>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/users", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Array<User>::class.java).toList())
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    Result.failure(Exception("Failed to fetch users"))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Array<User>::class.java).toList())
+            } else {
+                val msg = if (responseCode == 401) "Unauthorized" else parseError(response, "Failed to fetch users")
+                Result.failure(Exception(msg))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
     suspend fun getUserDetails(id: Int): Result<User> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/users/details?id=$id", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, User::class.java))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "User not found"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, User::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "User not found")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
     suspend fun getOrders(): Result<List<Order>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Array<Order>::class.java).toList())
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    Result.failure(Exception("Failed to fetch orders"))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Array<Order>::class.java).toList())
+            } else {
+                val msg = if (responseCode == 401) "Unauthorized" else parseError(response, "Failed to fetch orders")
+                Result.failure(Exception(msg))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
     suspend fun getOrderDetails(id: Int): Result<Order> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders/details?id=$id", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Order::class.java))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Order not found"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Order::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "Order not found")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -197,25 +180,16 @@ object ApiService {
             val request = CreateOrderRequest(receiverId, name, meta, comment)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK, HttpsURLConnection.HTTP_CREATED -> {
-                    Result.success(gson.fromJson(response, Order::class.java))
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Failed to create order"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode in 200..299) {
+                Result.success(gson.fromJson(response, Order::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to create order")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -227,42 +201,32 @@ object ApiService {
             val request = UpdateOrderStatusRequest(orderId, status)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Order::class.java))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Failed to update order status"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Order::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to update order status")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
     suspend fun getOrderScans(orderId: Int): Result<List<Scan>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders/scans?order_id=$orderId", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Array<Scan>::class.java).toList())
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    Result.failure(Exception("Failed to fetch scans"))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Array<Scan>::class.java).toList())
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to fetch scans")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -281,25 +245,16 @@ object ApiService {
             val request = CreateScanRequest(orderId, photoBase64, condition, longitude, latitude, comment)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK, HttpsURLConnection.HTTP_CREATED -> {
-                    Result.success(Unit)
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    val response = conn.inputStream.bufferedReader().readText()
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Failed to create scan"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to create scan")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -311,20 +266,16 @@ object ApiService {
     suspend fun getContacts(): Result<List<Contact>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/contacts", "GET")
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK -> {
-                    Result.success(gson.fromJson(response, Array<Contact>::class.java).toList())
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    Result.failure(Exception("Failed to fetch contacts"))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                Result.success(gson.fromJson(response, Array<Contact>::class.java).toList())
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to fetch contacts")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -336,25 +287,16 @@ object ApiService {
             val request = ContactIdRequest(contactId)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            val response = conn.inputStream.bufferedReader().readText()
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_OK, HttpsURLConnection.HTTP_CREATED -> {
-                    Result.success(gson.fromJson(response, Contact::class.java))
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Failed to add contact"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode in 200..299) {
+                Result.success(gson.fromJson(response, Contact::class.java))
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to add contact")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 
@@ -366,25 +308,16 @@ object ApiService {
             val request = ContactIdRequest(contactId)
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
-            when (conn.responseCode) {
-                HttpsURLConnection.HTTP_NO_CONTENT, HttpsURLConnection.HTTP_OK -> {
-                    Result.success(Unit)
-                }
-                HttpsURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Unauthorized"))
-                }
-                else -> {
-                    val response = conn.inputStream.bufferedReader().readText()
-                    val error = try {
-                        gson.fromJson(response, ErrorResponse::class.java).error
-                    } catch (e: Exception) {
-                        "Failed to remove contact"
-                    }
-                    Result.failure(Exception(error))
-                }
+            val responseCode = conn.responseCode
+            val response = readResponse(conn)
+
+            if (responseCode in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(parseError(response, "Failed to remove contact")))
             }.also { conn.disconnect() }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(e.message ?: "Network error"))
         }
     }
 }
