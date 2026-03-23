@@ -1,7 +1,12 @@
 package app.cryptoseal.tabs.packages
 
+import android.content.ContentValues
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.provider.MediaStore
 import android.util.Base64
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,7 +25,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,17 +42,24 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.cryptoseal.data.model.Scan
 import app.cryptoseal.tabs.PackagesViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PackageSheet(
@@ -56,12 +70,14 @@ fun PackageSheet(
     val scans by viewModel.scans.collectAsState()
     val isScansLoading by viewModel.isScansLoading.collectAsState()
     val users by viewModel.users.collectAsState()
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(pkg.id) {
         viewModel.fetchScans(pkg.id.toInt())
     }
 
     var selectedScanForDetails by remember { mutableStateOf<Scan?>(null) }
+    var qrBitmapToShow by remember { mutableStateOf<Bitmap?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -83,17 +99,37 @@ fun PackageSheet(
                     .padding(24.dp)
             ) {
                 // Header Information
-                Text(
-                    text = pkg.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = pkg.status,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = pkg.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = pkg.status,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    IconButton(onClick = {
+                        scope.launch {
+                            qrBitmapToShow = viewModel.generateQrCode(pkg.id)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode,
+                            contentDescription = "Show QR Code",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
                     text = "Chain of Custody",
@@ -158,6 +194,129 @@ fun PackageSheet(
 
     selectedScanForDetails?.let { scan ->
         ScanDetailsDialog(scan = scan, onDismiss = { selectedScanForDetails = null })
+    }
+
+    qrBitmapToShow?.let { bitmap ->
+        QRDisplayDialog(
+            bitmap = bitmap,
+            packageName = pkg.name,
+            packageId = pkg.id,
+            onDismiss = { qrBitmapToShow = null }
+        )
+    }
+}
+
+@Composable
+fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Package QR Code",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        scope.launch {
+                            val success = saveQrToGallery(context, bitmap, "QR_$packageId")
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    "QR Code saved to gallery",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Failed to save QR Code",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save to Gallery",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "$packageName (ID: $packageId)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "QR Code",
+                    modifier = Modifier
+                        .size(250.dp)
+                        .background(Color.White)
+                        .padding(8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Have the receiver or courier scan this QR code to confirm the transfer of custody.",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(onClick = onDismiss) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+suspend fun saveQrToGallery(
+    context: android.content.Context,
+    bitmap: Bitmap,
+    name: String
+): Boolean = withContext(Dispatchers.IO) {
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.png")
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/CryptoSeal")
+        }
+    }
+
+    val uri =
+        context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+    if (uri != null) {
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    } else {
+        false
     }
 }
 

@@ -1,13 +1,11 @@
 package app.cryptoseal.tabs.creator
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.data.model.Order
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
+import app.cryptoseal.util.QRUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,7 +67,7 @@ class CreatorViewModel : ViewModel() {
             ApiService.createOrder(receiverId, name, meta, comment, photoBase64).fold(
                 onSuccess = { order ->
                     val qrBitmap = withContext(Dispatchers.Default) {
-                        generateQrBitmap(order.id.toString())
+                        QRUtils.generateQrBitmap(order.id.toString())
                     }
                     _createOrderResult.value = CreateOrderResult.Success(order, qrBitmap)
                 },
@@ -83,17 +81,5 @@ class CreatorViewModel : ViewModel() {
 
     fun clearCreateResult() {
         _createOrderResult.value = null
-    }
-
-    private fun generateQrBitmap(content: String, size: Int = 512): Bitmap {
-        val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, size, size)
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        for (x in 0 until size) {
-            for (y in 0 until size) {
-                bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
-            }
-        }
-        return bitmap
     }
 }

@@ -1,5 +1,6 @@
 package app.cryptoseal.tabs
 
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,10 +8,13 @@ import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.data.model.Scan
 import app.cryptoseal.data.model.User
 import app.cryptoseal.tabs.packages.PackageItem
+import app.cryptoseal.util.QRUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PackagesViewModel : ViewModel() {
 
@@ -102,6 +106,10 @@ class PackagesViewModel : ViewModel() {
                 }
             _isScansLoading.value = false
         }
+    }
+
+    suspend fun generateQrCode(content: String): Bitmap = withContext(Dispatchers.Default) {
+        QRUtils.generateQrBitmap(content)
     }
 
     fun addPackage(packageItem: PackageItem) {
