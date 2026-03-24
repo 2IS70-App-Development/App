@@ -7,7 +7,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -66,7 +66,7 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
                 BottomNavItem.Packages -> Icons.Default.Home
                 BottomNavItem.Activity -> Icons.Default.Notifications
                 BottomNavItem.Creator -> Icons.Default.Add
-                BottomNavItem.Scanner -> Icons.Default.Search
+                BottomNavItem.Scanner -> Icons.Default.QrCodeScanner
                 BottomNavItem.Profile -> Icons.Default.Person
                 else -> Icons.Default.Home
             }
