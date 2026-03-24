@@ -57,6 +57,9 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.9.7")
 
+    // ViewModel Compose
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+
     // CameraX core library
     implementation("androidx.camera:camera-camera2:1.5.3")
     implementation("androidx.camera:camera-lifecycle:1.5.3")
@@ -65,6 +68,9 @@ dependencies {
 
     // Google ML Kit for reading the QR Code
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // Location
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // More icons
     implementation("androidx.compose.material:material-icons-extended")

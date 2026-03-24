@@ -10,8 +10,10 @@ import app.cryptoseal.data.model.User
 import app.cryptoseal.tabs.packages.PackageItem
 import app.cryptoseal.util.QRUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,6 +42,9 @@ class PackagesViewModel : ViewModel() {
     // Users for name mapping
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
+
+    private val _toastMessage = MutableSharedFlow<String>()
+    val toastMessage = _toastMessage.asSharedFlow()
 
     init {
         refreshPackages()
@@ -105,6 +110,21 @@ class PackagesViewModel : ViewModel() {
                     Log.e("PackagesViewModel", "Error fetching scans for order $orderId", it)
                 }
             _isScansLoading.value = false
+        }
+    }
+
+    fun updateOrderStatus(orderId: String, newStatus: String) {
+        viewModelScope.launch {
+            val idInt = orderId.toIntOrNull() ?: return@launch
+            ApiService.updateOrderStatus(idInt, newStatus)
+                .onSuccess {
+                    _toastMessage.emit("Package marked as $newStatus")
+                    refreshPackages()
+                    fetchScans(idInt)
+                }
+                .onFailure {
+                    _toastMessage.emit("Failed to update status: ${it.message}")
+                }
         }
     }
 

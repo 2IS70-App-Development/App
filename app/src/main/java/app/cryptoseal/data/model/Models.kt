@@ -66,7 +66,7 @@ data class UpdateOrderStatusRequest(
     val status: String
 )
 
-data class CreateScanRequest(
+data class CreateOrderScanRequest(
     @SerializedName("order_id")
     val orderId: Int,
     @SerializedName("photo_base64")

@@ -25,9 +25,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +72,7 @@ fun PackageSheet(
     viewModel: PackagesViewModel,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val scans by viewModel.scans.collectAsState()
     val isScansLoading by viewModel.isScansLoading.collectAsState()
     val users by viewModel.users.collectAsState()
@@ -76,8 +82,15 @@ fun PackageSheet(
         viewModel.fetchScans(pkg.id.toInt())
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.toastMessage.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     var selectedScanForDetails by remember { mutableStateOf<Scan?>(null) }
     var qrBitmapToShow by remember { mutableStateOf<Bitmap?>(null) }
+    var showConfirmationDialog by remember { mutableStateOf<String?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -86,7 +99,7 @@ fun PackageSheet(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .fillMaxHeight(0.8f)
+                .fillMaxHeight(0.85f)
                 .padding(vertical = 16.dp),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
@@ -181,6 +194,40 @@ fun PackageSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Action Buttons
+                val canCancel =
+                    pkg.isSentByMe && pkg.status.lowercase() != "cancelled" && pkg.status.lowercase() != "delivered"
+                val canMarkDelivered =
+                    !pkg.isSentByMe && pkg.status.lowercase() != "delivered" && pkg.status.lowercase() != "cancelled"
+
+                if (canCancel) {
+                    Button(
+                        onClick = { showConfirmationDialog = "cancelled" },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Cancel, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Cancel Order")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                if (canMarkDelivered) {
+                    Button(
+                        onClick = { showConfirmationDialog = "delivered" },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Mark as Delivered")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 // Close Button
                 TextButton(
                     onClick = onDismiss,
@@ -190,6 +237,34 @@ fun PackageSheet(
                 }
             }
         }
+    }
+
+    showConfirmationDialog?.let { targetStatus ->
+        AlertDialog(
+            onDismissRequest = { showConfirmationDialog = null },
+            title = { Text("Confirm Action") },
+            text = {
+                Text("Are you sure you want to mark '${pkg.name}' as $targetStatus? This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateOrderStatus(pkg.id, targetStatus)
+                        showConfirmationDialog = null
+                    }
+                ) {
+                    Text(
+                        "Confirm",
+                        color = if (targetStatus == "cancelled") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmationDialog = null }) {
+                    Text("Back")
+                }
+            }
+        )
     }
 
     selectedScanForDetails?.let { scan ->

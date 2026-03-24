@@ -116,7 +116,10 @@ fun PackagesTab(
         }
     }
 
-    selectedPackage?.let { pkg ->
+    // Ensure the sheet uses the latest data from the state flow when the status changes
+    val packageToShow = allPackages.find { it.id == selectedPackage?.id } ?: selectedPackage
+
+    packageToShow?.let { pkg ->
         PackageSheet(
             pkg = pkg,
             viewModel = viewModel,

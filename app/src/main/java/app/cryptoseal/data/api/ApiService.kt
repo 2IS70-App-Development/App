@@ -8,7 +8,7 @@ import app.cryptoseal.data.model.AuthResponse
 import app.cryptoseal.data.model.Contact
 import app.cryptoseal.data.model.ContactIdRequest
 import app.cryptoseal.data.model.CreateOrderRequest
-import app.cryptoseal.data.model.CreateScanRequest
+import app.cryptoseal.data.model.CreateOrderScanRequest
 import app.cryptoseal.data.model.ErrorResponse
 import app.cryptoseal.data.model.LoginRequest
 import app.cryptoseal.data.model.Order
@@ -26,7 +26,7 @@ import javax.net.ssl.HttpsURLConnection
 
 object ApiService {
     private const val TAG = "ApiService"
-    private const val BASE_URL = "http://10.0.2.2:8080"
+    private const val BASE_URL = "https://app.dev.libr.live"
     private val gson = Gson()
     private var sessionManager: SessionManager? = null
 
@@ -282,7 +282,14 @@ object ApiService {
             val conn = authenticatedConnection("/auth/orders/scan", "POST")
             conn.doOutput = true
 
-            val request = CreateScanRequest(orderId, photoBase64, condition, longitude, latitude, comment)
+            val request = CreateOrderScanRequest(
+                orderId,
+                photoBase64,
+                condition,
+                longitude,
+                latitude,
+                comment
+            )
             OutputStreamWriter(conn.outputStream).use { it.write(gson.toJson(request)) }
 
             val responseCode = conn.responseCode

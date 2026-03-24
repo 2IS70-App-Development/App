@@ -52,7 +52,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it; errorMessage = null },
-            label = { Text("Email") },
+            label = { Text("Username") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isLoading
