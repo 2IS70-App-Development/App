@@ -62,6 +62,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.cryptoseal.data.model.Scan
 import app.cryptoseal.tabs.PackagesViewModel
+import app.cryptoseal.util.DateTimeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -441,7 +442,7 @@ fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetail
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${scan.createdAt} • $courierEmail",
+                        text = "${DateTimeUtils.formatIsoDate(scan.createdAt)} • $courierEmail",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -493,6 +494,13 @@ fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
+
+                Text("Time", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    DateTimeUtils.formatIsoDate(scan.createdAt),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text("Location", style = MaterialTheme.typography.labelLarge)
                 Text(
