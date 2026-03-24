@@ -54,7 +54,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -196,24 +195,15 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
                     )
                     Button(
                         onClick = {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        },
-                        modifier = Modifier.padding(top = 24.dp)
-                    ) {
-                        Text("Grant Permission")
-                    }
-
-                    TextButton(
-                        onClick = {
                             val intent =
                                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                     data = Uri.fromParts("package", context.packageName, null)
                                 }
                             context.startActivity(intent)
                         },
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 24.dp)
                     ) {
-                        Text("Open App Settings")
+                        Text("Grant Permission")
                     }
                 }
             }
