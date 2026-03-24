@@ -36,9 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.cryptoseal.data.model.Activity
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import app.cryptoseal.util.DateTimeUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -135,7 +133,7 @@ fun ActivityItem(activity: Activity) {
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = formatIsoDate(activity.createdAt),
+                text = DateTimeUtils.formatIsoDate(activity.createdAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -148,14 +146,4 @@ fun ActivityItem(activity: Activity) {
         thickness = 1.dp,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     )
-}
-
-fun formatIsoDate(isoString: String): String {
-    return try {
-        val parsed = ZonedDateTime.parse(isoString)
-        val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy • hh:mm a", Locale.getDefault())
-        parsed.format(formatter)
-    } catch (e: Exception) {
-        isoString
-    }
 }
