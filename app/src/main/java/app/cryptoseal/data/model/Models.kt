@@ -3,10 +3,12 @@ package app.cryptoseal.data.model
 import com.google.gson.annotations.SerializedName
 
 /**
- * Represents a user within the CryptoSeal system.
- * @property id Unique identifier for the user.
- * @property email The user's registered email address.
- * @property createdAt Timestamp indicating when the user account was created.
+ * User Data Model
+ * Represents a registered user in the CryptoSeal system.
+ * 
+ * @property id The unique numeric ID assigned by the database.
+ * @property email The unique email address used for login and identification.
+ * @property createdAt ISO 8601 timestamp of when the account was created.
  */
 data class User(
     val id: Int,
@@ -16,16 +18,20 @@ data class User(
 )
 
 /**
- * Represents a physical package or "order" being tracked in the system.
+ * Order Data Model
+ * Represents a physical package or "shipment" being tracked.
+ * 
+ * An Order is the primary entity in the system, moving from a Sender to a Receiver.
+ * 
  * @property id Unique identifier for the order.
- * @property senderId User ID of the person who sent the package.
- * @property receiverId User ID of the intended recipient.
- * @property name A descriptive name for the package.
- * @property status Current delivery status (e.g., "SENT", "DELIVERED").
- * @property meta Additional metadata associated with the package.
- * @property comment A general comment or description provided by the sender.
- * @property photo Optional Base64 encoded string of a photo of the package.
- * @property createdAt Timestamp when the order was first created.
+ * @property senderId ID of the user who initiated the shipment.
+ * @property receiverId ID of the user intended to receive the shipment.
+ * @property name User-provided title for the package (e.g., "MacBook Pro").
+ * @property status Current lifecycle state: "SENT", "DELIVERED", or "CANCELLED".
+ * @property meta JSON or string-based metadata for extensible attributes.
+ * @property comment A general description provided by the sender.
+ * @property photo Optional Base64 encoded string of the package's initial state.
+ * @property createdAt Timestamp of when the order was first registered.
  */
 data class Order(
     val id: Int,
@@ -43,17 +49,21 @@ data class Order(
 )
 
 /**
- * Represents a tracking event (scan) for a specific order.
- * Recorded whenever a package is handed over or checked.
- * @property id Unique identifier for the scan record.
- * @property orderId ID of the order this scan belongs to.
- * @property courierId User ID of the person performing the scan.
- * @property photo Optional Base64 encoded string of a photo taken during the scan.
- * @property condition Description of the package's physical state (e.g., "MINT", "DAMAGED").
- * @property longitude GPS longitude where the scan occurred.
- * @property latitude GPS latitude where the scan occurred.
- * @property comment Additional notes about this specific scan.
- * @property createdAt Timestamp when the scan was recorded.
+ * Scan Data Model
+ * Represents a tracking event or "checkpoint" in a package's journey.
+ * 
+ * A Scan is recorded every time a package is handed over or inspected.
+ * It provides the "Chain of Custody" by linking an order to a courier at a specific location.
+ * 
+ * @property id Unique identifier for this scan record.
+ * @property orderId The ID of the order being scanned.
+ * @property courierId The ID of the user who performed the scan.
+ * @property photo Base64 encoded image taken during the scan (handover proof).
+ * @property condition Physical state of the package: "Good", "Missing", or "Damaged".
+ * @property longitude GPS longitude coordinate of the scan location.
+ * @property latitude GPS latitude coordinate of the scan location.
+ * @property comment Additional notes about this specific scan event.
+ * @property createdAt Timestamp of when the scan was performed.
  */
 data class Scan(
     val id: Int,
@@ -71,12 +81,13 @@ data class Scan(
 )
 
 /**
- * Represents a system activity or notification.
- * Used for displaying a feed of events to the user.
+ * Activity Data Model
+ * Represents a notification or system event log for the user.
+ * 
  * @property actorId The ID of the user who performed the action.
- * @property userId The ID of the user whom the action concerns (often the current user).
- * @property type The category of activity (e.g., "order_created", "status_updated").
- * @property summary A brief text description of what happened.
+ * @property userId The ID of the user who is notified of this action.
+ * @property type The category of event (e.g., "order_created", "status_changed").
+ * @property summary A concise, human-readable description of what happened.
  */
 data class Activity(
     val id: Int,
@@ -90,8 +101,10 @@ data class Activity(
     val createdAt: String
 )
 
+// --- Request Bodies for API Communication ---
+
 /**
- * Request body for creating a new order.
+ * Data needed to create a new order via POST /auth/orders.
  */
 data class CreateOrderRequest(
     @SerializedName("receiver_id")
@@ -103,7 +116,7 @@ data class CreateOrderRequest(
 )
 
 /**
- * Request body for updating the status of an existing order.
+ * Data needed to update an order's status via PUT /auth/orders/status.
  */
 data class UpdateOrderStatusRequest(
     @SerializedName("order_id")
@@ -112,7 +125,7 @@ data class UpdateOrderStatusRequest(
 )
 
 /**
- * Request body for creating a new scan record.
+ * Data needed to register a new scan via POST /auth/orders/scan.
  */
 data class CreateOrderScanRequest(
     @SerializedName("order_id")
@@ -126,7 +139,7 @@ data class CreateOrderScanRequest(
 )
 
 /**
- * Request body for user authentication (Login).
+ * Data for user authentication via POST /jwt/create.
  */
 data class LoginRequest(
     val email: String,
@@ -134,7 +147,7 @@ data class LoginRequest(
 )
 
 /**
- * Request body for user registration (Signup).
+ * Data for user registration via POST /signup.
  */
 data class SignupRequest(
     val email: String,
@@ -142,7 +155,7 @@ data class SignupRequest(
 )
 
 /**
- * Successful authentication response containing the JWT token.
+ * Response structure for successful authentication.
  */
 data class AuthResponse(
     @SerializedName("access_token")
@@ -150,14 +163,14 @@ data class AuthResponse(
 )
 
 /**
- * Standard error response structure from the API.
+ * Standard error structure returned by the API on failure.
  */
 data class ErrorResponse(
     val error: String
 )
 
 /**
- * Represents a contact relationship between two users.
+ * Represents a contact link between two users in the database.
  */
 data class Contact(
     @SerializedName("owner_id")
@@ -167,7 +180,7 @@ data class Contact(
 )
 
 /**
- * Request body for operations involving a specific contact ID.
+ * Request body for adding or removing a contact by their user ID.
  */
 data class ContactIdRequest(
     @SerializedName("contact_id")

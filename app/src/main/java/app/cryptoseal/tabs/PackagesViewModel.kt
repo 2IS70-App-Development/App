@@ -19,79 +19,56 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * ViewModel responsible for managing package-related data and states within the application.
- * It handles fetching orders, managing scans, updating statuses, and generating QR codes.
- * This class serves as the bridge between the UI (PackagesTab, ScannerTab) and the data layer (ApiService).
+ * PackagesViewModel: Central state manager for the Packages and Order Detail screens.
+ * 
+ * This ViewModel acts as a mediator between the raw data from [ApiService] and the 
+ * presentation-optimized models used by the Compose UI. It manages the lifecycle 
+ * of package lists, scan logs, and user name resolution.
+ *
+ * Key Responsibilities:
+ * 1. Fetching and filtering orders based on the current user's role (Sender vs Receiver).
+ * 2. Caching a list of system users for ID-to-email mapping in the UI.
+ * 3. Handling asynchronous updates like changing an order's status.
+ * 4. Generating QR code bitmaps on background threads.
  */
 class PackagesViewModel : ViewModel() {
 
-    // Internal mutable state flow for the list of all packages.
-    private val _allPackages = MutableStateFlow<List<PackageItem>>(emptyList())
+    // --- State Streams (Mutable Internal, Read-only External) ---
 
-    /**
-     * Publicly exposed state flow for observing the list of all packages.
-     * UI components should collect from this flow to display package information.
-     */
+    // Master list of all packages associated with the user.
+    private val _allPackages = MutableStateFlow<List<PackageItem>>(emptyList())
     val allPackages: StateFlow<List<PackageItem>> = _allPackages.asStateFlow()
 
-    // Internal state flow to track the currently selected tab index in the Packages screen.
+    // Tracks which tab is selected in the Packages view: 0 for "Sent", 1 for "Received".
     private val _selectedTab = MutableStateFlow(0)
-
-    /**
-     * Publicly exposed state flow for the selected tab index.
-     */
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
-    // Internal state flow to track the loading state of general package operations.
+    // General loading state for the initial list fetch.
     private val _isLoading = MutableStateFlow(false)
-
-    /**
-     * Publicly exposed state flow indicating if a loading operation is in progress.
-     */
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // Internal state flow for holding any error messages encountered during data operations.
+    // Error state for handling network failures in the main list.
     private val _error = MutableStateFlow<String?>(null)
-
-    /**
-     * Publicly exposed state flow for error messages. UI can show snackbars or dialogs based on this.
-     */
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // Scans state: Holds the history of scans for a selected package.
+    // History of tracking scans for the currently inspected package.
     private val _scans = MutableStateFlow<List<Scan>>(emptyList())
-
-    /**
-     * Publicly exposed state flow for the list of scans associated with a specific package.
-     */
     val scans: StateFlow<List<Scan>> = _scans.asStateFlow()
 
-    // Internal state flow to track if scans are currently being loaded from the API.
+    // Loading state specifically for fetching scan history.
     private val _isScansLoading = MutableStateFlow(false)
-
-    /**
-     * Publicly exposed state flow for the loading state of scan history.
-     */
     val isScansLoading: StateFlow<Boolean> = _isScansLoading.asStateFlow()
 
-    // Users for name mapping: Caches the list of users to resolve sender/receiver names.
+    // Cached list of all users to allow displaying emails instead of numeric IDs.
     private val _users = MutableStateFlow<List<User>>(emptyList())
-
-    /**
-     * Publicly exposed state flow for the list of system users.
-     */
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
-    // Shared flow for one-time events like toast notifications.
+    // Shared flow for one-time events like Toast notifications (navigation, success msgs).
     private val _toastMessage = MutableSharedFlow<String>()
-
-    /**
-     * Publicly exposed shared flow for toast messages that should only be shown once.
-     */
     val toastMessage = _toastMessage.asSharedFlow()
 
     /**
-     * Initializes the ViewModel by refreshing the package list and fetching the list of users.
+     * Initialization block: Triggered when the Dashboard/Packages tab is first created.
      */
     init {
         refreshPackages()
@@ -99,16 +76,15 @@ class PackagesViewModel : ViewModel() {
     }
 
     /**
-     * Updates the currently selected tab index.
-     * @param index The index of the tab to be selected.
+     * Switches the filter context (Sent vs Received).
+     * @param index 0 for Sent, 1 for Received.
      */
     fun setTab(index: Int) {
         _selectedTab.value = index
     }
 
     /**
-     * Fetches the list of all users from the API.
-     * This is used for mapping user IDs to readable names in the UI.
+     * Fetches the global list of users to facilitate name resolution in lists and details.
      */
     private fun fetchUsers() {
         viewModelScope.launch {
@@ -119,30 +95,24 @@ class PackagesViewModel : ViewModel() {
     }
 
     /**
-     * Refreshes the list of packages (orders) from the server.
-     * It maps the API order model to the UI PackageItem model, determining if the current user is the sender.
+     * Refreshes the package list from the backend.
+     * 
+     * It transforms the domain [Order] objects into UI-ready [PackageItem] objects, 
+     * explicitly flagging which packages were initiated by the current user.
      */
     fun refreshPackages() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            Log.d("PackagesViewModel", "Refreshing packages...")
+
             ApiService.getOrders()
                 .onSuccess { orders ->
                     val currentUser = ApiService.currentUser
-                    Log.d(
-                        "PackagesViewModel",
-                        "Fetched ${orders.size} orders. CurrentUser ID: ${currentUser?.id}"
-                    )
 
-                    // Map Order domain objects to PackageItem UI objects.
+                    // Map API orders to the UI data class
                     _allPackages.value = orders.map { order ->
-                        // A package is "sent" by the user if their ID matches the senderId.
+                        // Determine directionality: Am I the one who sent this?
                         val isSent = order.senderId == currentUser?.id
-                        Log.d(
-                            "PackagesViewModel",
-                            "Order ${order.id}: sender=${order.senderId}, isSentByMe=$isSent"
-                        )
                         PackageItem(
                             id = order.id.toString(),
                             name = order.name,
@@ -152,7 +122,6 @@ class PackagesViewModel : ViewModel() {
                     }
                 }
                 .onFailure {
-                    Log.e("PackagesViewModel", "Error fetching packages", it)
                     _error.value = it.message ?: "Failed to fetch packages"
                 }
             _isLoading.value = false
@@ -160,15 +129,17 @@ class PackagesViewModel : ViewModel() {
     }
 
     /**
-     * Fetches the scan history for a specific order.
-     * @param orderId The unique identifier of the order.
+     * Fetches the chronological history of scans for a specific package.
+     * 
+     * @param orderId The numeric ID of the package.
      */
     fun fetchScans(orderId: Int) {
         viewModelScope.launch {
             _isScansLoading.value = true
-            _scans.value = emptyList() // Clear previous scans while loading.
+            _scans.value = emptyList() // Reset list to show loading state clearly
             ApiService.getOrderScans(orderId)
                 .onSuccess { scanList ->
+                    // The server returns scans; the UI handles the vertical timeline.
                     _scans.value = scanList
                 }
                 .onFailure {
@@ -179,9 +150,10 @@ class PackagesViewModel : ViewModel() {
     }
 
     /**
-     * Updates the status of an existing order (e.g., marking it as DELIVERED).
-     * @param orderId The string representation of the order ID.
-     * @param newStatus The new status string to be applied.
+     * Updates an order's status (e.g., confirming delivery or cancelling).
+     * 
+     * @param orderId The ID of the order to modify.
+     * @param newStatus The target status string.
      */
     fun updateOrderStatus(orderId: String, newStatus: String) {
         viewModelScope.launch {
@@ -189,8 +161,9 @@ class PackagesViewModel : ViewModel() {
             ApiService.updateOrderStatus(idInt, newStatus)
                 .onSuccess {
                     _toastMessage.emit("Package marked as $newStatus")
-                    // Refresh the lists to reflect changes in the UI.
+                    // Trigger a list refresh to reflect the new status in the UI.
                     refreshPackages()
+                    // Refresh scans to show the final delivery event in the timeline.
                     fetchScans(idInt)
                 }
                 .onFailure {
@@ -200,19 +173,16 @@ class PackagesViewModel : ViewModel() {
     }
 
     /**
-     * Generates a QR code bitmap for the given content string.
-     * This operation is performed on a background (Default) dispatcher.
-     * @param content The string content to be encoded in the QR code.
-     * @return A Bitmap representing the generated QR code.
+     * Generates a QR Code on a background dispatcher to avoid UI jank.
+     * 
+     * @param content The text to encode (usually the Order ID).
      */
     suspend fun generateQrCode(content: String): Bitmap = withContext(Dispatchers.Default) {
         QRUtils.generateQrBitmap(content)
     }
 
     /**
-     * Manually adds a package item to the internal list.
-     * This can be used for optimistic UI updates or local-only additions.
-     * @param packageItem The package item to be added.
+     * Local helper to add a package item manually (e.g. for optimistic UI updates).
      */
     fun addPackage(packageItem: PackageItem) {
         _allPackages.value = _allPackages.value + packageItem
