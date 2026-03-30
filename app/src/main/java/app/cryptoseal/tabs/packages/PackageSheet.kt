@@ -68,12 +68,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * A detailed view for a single package, typically shown as a full-screen dialog.
- * Displays the "Chain of Custody" (scan history) and provides actions like marking as delivered or cancelling.
+ * A comprehensive detail view for a specific package, displayed as a full-screen dialog.
+ * 
+ * This component acts as the primary interface for tracking a package's journey, 
+ * viewing its "Chain of Custody", and performing final status updates like 
+ * delivery confirmation or cancellation.
  *
- * @param pkg The package item to display details for.
- * @param viewModel The shared [PackagesViewModel] to fetch scans and update status.
- * @param onDismiss Callback to close the sheet.
+ * Confusing Areas Addressed:
+ * 1. Role-based actions: Only senders can cancel; only receivers can mark as delivered.
+ * 2. Asynchronous scan loading: Uses LaunchedEffect to trigger API calls on item selection.
+ * 3. QR Code generation: Provides a way for users to show the QR code to others for scanning.
+ * 4. Timeline UI: Implements a custom vertical timeline using LazyColumn and TimelineNode.
+ *
+ * @param pkg The selected package item to display.
+ * @param viewModel The shared [PackagesViewModel] managing the package and scan states.
+ * @param onDismiss Callback to close this detail view.
  */
 @Composable
 fun PackageSheet(
@@ -82,30 +91,35 @@ fun PackageSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // Collecting states from the shared ViewModel.
     val scans by viewModel.scans.collectAsState()
     val isScansLoading by viewModel.isScansLoading.collectAsState()
     val users by viewModel.users.collectAsState()
+
+    // Coroutine scope for one-off operations like QR generation.
     val scope = rememberCoroutineScope()
 
-    // Fetch scan history whenever the package ID changes.
+    // Side Effect: Fetch scan history from the backend whenever this package is shown.
     LaunchedEffect(pkg.id) {
         viewModel.fetchScans(pkg.id.toInt())
     }
 
-    // Listen for toast messages from the ViewModel and display them.
+    // Side Effect: Observe a shared toast message flow from the ViewModel to show UI feedback.
     LaunchedEffect(Unit) {
         viewModel.toastMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Local UI states for various sub-dialogs.
+    // Local UI State for managing sub-overlays.
     var selectedScanForDetails by remember { mutableStateOf<Scan?>(null) }
     var qrBitmapToShow by remember { mutableStateOf<Bitmap?>(null) }
     var showConfirmationDialog by remember { mutableStateOf<String?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
+        // usePlatformDefaultWidth = false allows the card to take up most of the screen width.
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Card(
@@ -114,16 +128,14 @@ fun PackageSheet(
                 .fillMaxHeight(0.85f)
                 .padding(vertical = 16.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                // Header Information: Package name, current status, and QR code trigger.
+                // --- Header: Name, Status, and QR Trigger ---
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -142,7 +154,7 @@ fun PackageSheet(
                     }
                     IconButton(onClick = {
                         scope.launch {
-                            // Generate QR code for the package ID to allow scanning by others.
+                            // Generates a QR code containing the order ID so others can scan it.
                             qrBitmapToShow = viewModel.generateQrCode(pkg.id)
                         }
                     }) {
@@ -164,6 +176,7 @@ fun PackageSheet(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
+                // --- Timeline Content ---
                 if (isScansLoading) {
                     Box(
                         modifier = Modifier
@@ -186,14 +199,10 @@ fun PackageSheet(
                         )
                     }
                 } else {
-                    // The Scrollable Timeline: Displays all handovers/checks for this package.
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
+                    // Scrollable list of handover events.
+                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                         itemsIndexed(scans) { index, scan ->
-                            // Resolve the courier's email from the cached user list.
+                            // Resolve the courier's email from the pre-fetched users list.
                             val courierEmail = users.find { it.id == scan.courierId }?.email
                                 ?: "ID: ${scan.courierId}"
                             TimelineNode(
@@ -208,9 +217,11 @@ fun PackageSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action Buttons: Logic to show "Cancel" (sender only) or "Mark Delivered" (receiver only).
+                // --- Contextual Actions ---
+                // Senders can cancel unless already delivered/cancelled.
                 val canCancel =
                     pkg.isSentByMe && pkg.status.lowercase() != "cancelled" && pkg.status.lowercase() != "delivered"
+                // Receivers can confirm delivery unless already delivered/cancelled.
                 val canMarkDelivered =
                     !pkg.isSentByMe && pkg.status.lowercase() != "delivered" && pkg.status.lowercase() != "cancelled"
 
@@ -232,7 +243,7 @@ fun PackageSheet(
                     Button(
                         onClick = { showConfirmationDialog = "delivered" },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), // Success Green
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null)
@@ -242,7 +253,7 @@ fun PackageSheet(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Close Button for the main dialog.
+                // Simple close button at the bottom of the card.
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
@@ -253,14 +264,14 @@ fun PackageSheet(
         }
     }
 
-    // Confirmation dialog before performing destructive or final actions.
+    // --- Auxiliary Dialogs ---
+
+    // Confirmation logic before performing a destructive or final API update.
     showConfirmationDialog?.let { targetStatus ->
         AlertDialog(
             onDismissRequest = { showConfirmationDialog = null },
             title = { Text("Confirm Action") },
-            text = {
-                Text("Are you sure you want to mark '${pkg.name}' as $targetStatus? This action cannot be undone.")
-            },
+            text = { Text("Are you sure you want to mark '${pkg.name}' as $targetStatus? This action cannot be undone.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -275,19 +286,17 @@ fun PackageSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirmationDialog = null }) {
-                    Text("Back")
-                }
+                TextButton(onClick = { showConfirmationDialog = null }) { Text("Back") }
             }
         )
     }
 
-    // Show details for a specific scan when a timeline node is clicked.
+    // Detail view for a specific scan node (shows photo, GPS coordinates, etc.).
     selectedScanForDetails?.let { scan ->
         ScanDetailsDialog(scan = scan, onDismiss = { selectedScanForDetails = null })
     }
 
-    // Full-screen QR code display for easy scanning.
+    // QR Code display dialog for handovers.
     qrBitmapToShow?.let { bitmap ->
         QRDisplayDialog(
             bitmap = bitmap,
@@ -299,8 +308,8 @@ fun PackageSheet(
 }
 
 /**
- * A dialog that displays the generated QR code for a package.
- * Allows the user to save the QR code image to their device's gallery.
+ * A dialog that displays a large version of a package's QR code.
+ * Includes functionality to save the QR code image to the device's gallery.
  */
 @Composable
 fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDismiss: () -> Unit) {
@@ -308,12 +317,9 @@ fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDi
     val scope = rememberCoroutineScope()
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
+        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -331,19 +337,16 @@ fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDi
                     IconButton(onClick = {
                         scope.launch {
                             val success = saveQrToGallery(context, bitmap, "QR_$packageId")
-                            if (success) {
-                                Toast.makeText(
-                                    context,
-                                    "QR Code saved to gallery",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "Failed to save QR Code",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            if (success) Toast.makeText(
+                                context,
+                                "QR Code saved to gallery",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            else Toast.makeText(
+                                context,
+                                "Failed to save QR Code",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }) {
                         Icon(
@@ -379,19 +382,14 @@ fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDi
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
-                }
+                TextButton(onClick = onDismiss) { Text("Close") }
             }
         }
     }
 }
 
 /**
- * Saves a Bitmap to the device's public "Pictures/CryptoSeal" directory.
- * Uses MediaStore for compatibility across different Android versions.
- *
- * @return True if the image was successfully saved, false otherwise.
+ * Saves a Bitmap image to the device's public gallery under the "Pictures/CryptoSeal" directory.
  */
 suspend fun saveQrToGallery(
     context: android.content.Context,
@@ -423,35 +421,25 @@ suspend fun saveQrToGallery(
 }
 
 /**
- * A single entry in the chain of custody timeline.
- * Consists of a vertical line, a dot, and textual details about the scan.
- *
- * @param scan The scan data to display.
- * @param courierEmail The email of the person who performed the scan.
- * @param isLast True if this is the latest scan, which suppresses the bottom connector line.
- * @param onShowDetails Callback to show more detailed information (photo, location).
+ * A custom UI node for the vertical timeline representing a single scan event.
+ * Consists of a vertical connector line, a primary dot, and textual event details.
  */
 @Composable
 fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetails: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-    ) {
-        // Left Column: The Circle and the Vertical Line
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .height(IntrinsicSize.Min)) {
+        // Left Column: The decorative dot and line.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(32.dp)
         ) {
-            // The Timeline Dot
             Box(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
             )
-
-            // The Connecting Line
             if (!isLast) {
                 Box(
                     modifier = Modifier
@@ -462,12 +450,10 @@ fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetail
             }
         }
 
-        // Right Column: The Event Details
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(bottom = 24.dp)
-        ) {
+        // Right Column: Event information.
+        Column(modifier = Modifier
+            .weight(1f)
+            .padding(bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -495,23 +481,20 @@ fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetail
 }
 
 /**
- * A dialog that shows fine-grained details of a scan, including the photo taken at that time.
- * Decodes the Base64 photo string into a Bitmap for display.
+ * A dialog that displays the full details of a specific scan, 
+ * including the high-resolution photo taken at the time of the handover.
  */
 @Composable
 fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Scan Details", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // If a photo exists for this scan, decode it from Base64.
+                // Decode the Base64 photo string into a Bitmap for display.
                 if (!scan.photo.isNullOrEmpty()) {
                     val bitmap = remember(scan.photo) {
                         try {
@@ -555,9 +538,10 @@ fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Dismiss")
-                }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) { Text("Dismiss") }
             }
         }
     }

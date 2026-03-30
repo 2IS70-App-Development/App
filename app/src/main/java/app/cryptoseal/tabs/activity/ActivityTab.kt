@@ -38,18 +38,25 @@ import app.cryptoseal.data.model.Activity
 import app.cryptoseal.util.DateTimeUtils
 
 /**
- * The "Activity" tab UI.
- * Displays a chronological list of events related to the user's packages and scans.
- * Supports pull-to-refresh to fetch the latest updates.
+ * The UI component for the "Activity" tab in the application.
  *
- * @param viewModel The [ActivityViewModel] providing the activity data.
+ * This screen provides a chronological feed of events relevant to the current user, 
+ * such as package creation, status updates, and scan records. It includes a 
+ * "Pull-to-Refresh" mechanism to manually update the feed from the server.
+ *
+ * @param viewModel The [ActivityViewModel] that provides the stream of activity data 
+ * and handles the refresh logic.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityTab(viewModel: ActivityViewModel) {
+    // Collecting the list of activities from the StateFlow in the ViewModel.
     val activities by viewModel.activities.collectAsState()
+
+    // Collecting the loading state to show the refresh indicator.
     val isLoading by viewModel.isLoading.collectAsState()
 
+    // PullToRefreshBox provides the standard Android pull-down-to-refresh interaction.
     PullToRefreshBox(
         isRefreshing = isLoading,
         onRefresh = { viewModel.refreshActivities() },
@@ -61,7 +68,7 @@ fun ActivityTab(viewModel: ActivityViewModel) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section Title
+            // Header: Displayed at the top of the list.
             item {
                 Text(
                     text = "Recent Activity",
@@ -72,7 +79,7 @@ fun ActivityTab(viewModel: ActivityViewModel) {
                 )
             }
 
-            // Empty state UI
+            // Empty State: Displayed if there are no activities to show after loading.
             if (activities.isEmpty() && !isLoading) {
                 item {
                     Box(
@@ -90,7 +97,7 @@ fun ActivityTab(viewModel: ActivityViewModel) {
                 }
             }
 
-            // The list of events
+            // Activity Items: Iterating through the list of activities provided by the ViewModel.
             items(activities) { activity ->
                 ActivityItem(activity)
             }
@@ -99,10 +106,12 @@ fun ActivityTab(viewModel: ActivityViewModel) {
 }
 
 /**
- * A single row in the activity list, representing a system event.
- * Displays an icon specific to the event type, a summary message, and a timestamp.
+ * A composable representing a single entry in the activity feed.
+ * 
+ * Each item consists of a themed icon based on the event type, a text summary, 
+ * and a formatted timestamp.
  *
- * @param activity The activity data to display.
+ * @param activity The [Activity] data object containing details of the event.
  */
 @Composable
 fun ActivityItem(activity: Activity) {
@@ -112,16 +121,18 @@ fun ActivityItem(activity: Activity) {
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 1. Leading Icon (Determined by Event Type)
+        // 1. Icon Selection Logic: 
+        // Assigns a specific icon and color based on the 'type' string from the backend.
         val (icon, color) = when (activity.type) {
             "order_created" -> Icons.Default.AddBox to MaterialTheme.colorScheme.primary
             "order_received" -> Icons.Default.Inbox to MaterialTheme.colorScheme.secondary
             "status_changed" -> Icons.Default.Edit to MaterialTheme.colorScheme.tertiary
-            "scan_created" -> Icons.Default.QrCodeScanner to Color(0xFF03A9F4)
-            "scan_added" -> Icons.Default.LibraryAdd to Color(0xFF4CAF50)
+            "scan_created" -> Icons.Default.QrCodeScanner to Color(0xFF03A9F4) // Sky Blue
+            "scan_added" -> Icons.Default.LibraryAdd to Color(0xFF4CAF50)      // Green
             else -> Icons.Default.Notifications to MaterialTheme.colorScheme.outline
         }
 
+        // Circular background for the leading icon.
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -130,7 +141,7 @@ fun ActivityItem(activity: Activity) {
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = "Activity type: ${activity.type}",
                 tint = color,
                 modifier = Modifier.size(24.dp)
             )
@@ -138,7 +149,8 @@ fun ActivityItem(activity: Activity) {
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        // 2. Text Details: Event summary and relative time.
+        // 2. Text Content: 
+        // Summary of what happened and the time it occurred.
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = activity.summary,
@@ -153,7 +165,8 @@ fun ActivityItem(activity: Activity) {
         }
     }
 
-    // 3. Subtle Divider between items.
+    // 3. Divider: 
+    // Adds a visual separation between items, indented to align with the text.
     HorizontalDivider(
         modifier = Modifier.padding(start = 56.dp, top = 12.dp),
         thickness = 1.dp,

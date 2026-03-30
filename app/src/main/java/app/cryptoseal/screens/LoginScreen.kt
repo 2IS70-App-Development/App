@@ -28,22 +28,31 @@ import kotlinx.coroutines.launch
 
 /**
  * The initial entry point screen for users to authenticate or register.
- * It provides fields for email and password and toggles between Login and Sign Up modes.
  *
- * @param onLoginSuccess Callback invoked when the user successfully authenticates.
+ * This screen provides a unified interface for both logging in and signing up. 
+ * It manages its own local state for form fields and UI feedback.
+ *
+ * @param onLoginSuccess Callback invoked when the user successfully authenticates 
+ * and is ready to proceed to the main application dashboard.
  */
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
-    // State for user input and UI feedback
+    // Local state for the email/username text field.
     var email by remember { mutableStateOf("") }
+
+    // Local state for the password text field.
     var password by remember { mutableStateOf("") }
+
+    // Tracks if a network request (Login or Signup) is currently in flight.
     var isLoading by remember { mutableStateOf(false) }
+
+    // Holds an error message string to display to the user if an operation fails.
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Toggle state between Login mode and Sign Up mode
+    // Toggle state between Login mode (false) and Sign Up mode (true).
     var isSignup by remember { mutableStateOf(false) }
 
-    // Coroutine scope for launching network requests from button clicks
+    // Coroutine scope for launching asynchronous network requests from UI events.
     val scope = rememberCoroutineScope()
 
     Column(
@@ -53,14 +62,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App Branding
+        // App Branding / Hero Text
         Text(
             text = "CryptoSeal",
             style = MaterialTheme.typography.headlineLarge,
             modifier = Modifier.padding(bottom = 32.dp)
         )
 
-        // Email/Username Input Field
+        // Email/Username Input Field.
+        // Clears any previous error message when the user starts typing.
         OutlinedTextField(
             value = email,
             onValueChange = { email = it; errorMessage = null },
@@ -72,7 +82,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password Input Field with obfuscation
+        // Password Input Field.
+        // Uses PasswordVisualTransformation to hide the characters.
         OutlinedTextField(
             value = password,
             onValueChange = { password = it; errorMessage = null },
@@ -85,7 +96,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Conditional display of error messages
+        // Conditional display of error messages if they exist.
         errorMessage?.let { error ->
             Text(
                 text = error,
@@ -95,35 +106,43 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             )
         }
 
-        // Show loading spinner or action buttons
+        // Show a loading spinner while waiting for the server, or the action buttons otherwise.
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.padding(vertical = 8.dp)
             )
         } else {
-            // Main Action Button (Login or Sign Up)
+            // Main Action Button (Triggers Login or Sign Up process).
             Button(
                 onClick = {
+                    // Simple client-side validation for empty fields.
                     if (email.isBlank() || password.isBlank()) {
                         errorMessage = "Please fill in all fields"
                         return@Button
                     }
+
                     isLoading = true
                     scope.launch {
                         val result = if (isSignup) {
-                            // If signing up, create account then immediately log in
+                            // Signup Flow: Create the account, then immediately try to log in to get a token.
                             ApiService.signup(email, password).fold(
                                 onSuccess = { ApiService.login(email, password) },
                                 onFailure = { Result.failure(it) }
                             )
                         } else {
-                            // Standard login attempt
+                            // Standard Login Flow.
                             ApiService.login(email, password)
                         }
                         
                         result.fold(
-                            onSuccess = { onLoginSuccess() },
-                            onFailure = { errorMessage = it.message }
+                            onSuccess = {
+                                // On success, navigate to the Dashboard.
+                                onLoginSuccess()
+                            },
+                            onFailure = {
+                                // On failure, stop loading and show the error returned by the API.
+                                errorMessage = it.message
+                            }
                         )
                         isLoading = false
                     }
@@ -136,7 +155,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Secondary button to switch between Login and Sign Up modes
+            // Secondary button to toggle between Login and Sign Up UI modes.
             OutlinedButton(
                 onClick = { isSignup = !isSignup },
                 modifier = Modifier.fillMaxWidth()

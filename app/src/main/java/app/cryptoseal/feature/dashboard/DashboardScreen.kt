@@ -33,35 +33,42 @@ import app.cryptoseal.tabs.profile.ProfileTab
 import app.cryptoseal.tabs.scanner.ScannerTab
 
 /**
- * The primary container for the authenticated part of the application.
- * It sets up the bottom navigation bar and the inner navigation host that
- * switches between different tabs (Packages, Activity, Creator, Scanner, Profile).
+ * The main Dashboard screen for the authenticated user session.
+ * 
+ * This screen acts as the primary container for the application's core functionality, 
+ * using a Bottom Navigation pattern to switch between different feature tabs.
  *
- * @param onLogout Callback to be triggered when the user logs out from the Profile tab.
+ * @param onLogout A callback function triggered when the user initiates a logout 
+ * (typically from the Profile tab), leading back to the Login screen.
  */
 @Composable
 fun DashboardScreen(onLogout: () -> Unit) {
-    // NavController for the internal dashboard navigation.
+    // NavController dedicated to managing navigation between bottom bar tabs.
     val bottomNavController = rememberNavController()
 
     Scaffold(
+        // The persistent bottom bar that remains visible as the user switches tabs.
         bottomBar = { CryptoSealBottomNavigationBar(bottomNavController) }
     ) { innerPadding ->
+        // The Box acts as a content area for the current tab, respecting Scaffold's padding (e.g., bottom bar height).
         Box(modifier = Modifier.padding(innerPadding)) {
-            // Main navigation host for the dashboard tabs.
+            // The NavGraph defines which Composable is shown based on the current 'bottomNavController' route.
             DashboardNavGraph(navController = bottomNavController, onLogout = onLogout)
         }
     }
 }
 
 /**
- * The bottom navigation bar for the CryptoSeal app.
- * Dynamically highlights the currently active route and handles tab switching.
+ * A custom Bottom Navigation Bar implementation for the CryptoSeal app.
  *
- * @param navController The navigation controller used to perform tab transitions.
+ * It dynamically highlights the selected item and performs optimized navigation 
+ * (preserving state and avoiding multiple instances of the same tab).
+ *
+ * @param navController The NavController that tracks the state of the dashboard tabs.
  */
 @Composable
 fun CryptoSealBottomNavigationBar(navController: NavHostController) {
+    // The list of navigation items defined in Navigation.kt
     val items = listOf(
         BottomNavItem.Packages,
         BottomNavItem.Activity,
@@ -73,18 +80,18 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface
     ) {
+        // Observe the current back stack entry to determine which tab is currently active.
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
 
         items.forEach { item ->
-            // Resolve the icon for each bottom navigation item.
+            // Match icons to the corresponding bottom navigation items.
             val icon = when (item) {
                 BottomNavItem.Packages -> Icons.Default.Home
                 BottomNavItem.Activity -> Icons.Default.Notifications
                 BottomNavItem.Creator -> Icons.Default.Add
                 BottomNavItem.Scanner -> Icons.Default.QrCodeScanner
                 BottomNavItem.Profile -> Icons.Default.Person
-                else -> Icons.Default.Home
             }
 
             NavigationBarItem(
@@ -92,12 +99,15 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
                 label = { Text(text = item.title) },
                 selected = currentRoute == item.route,
                 onClick = {
-                    // Navigate to the selected tab, popping up to the start destination to avoid stack buildup.
+                    // Optimized navigation logic:
                     navController.navigate(item.route) {
+                        // Pop up to the start destination of the graph to avoid building up a large stack of destinations.
                         navController.graph.startDestinationRoute?.let { route ->
                             popUpTo(route) { saveState = true }
                         }
+                        // Avoid multiple copies of the same destination when reselecting the same item.
                         launchSingleTop = true
+                        // Restore state when reselecting a previously selected item.
                         restoreState = true
                     }
                 },
@@ -114,40 +124,42 @@ fun CryptoSealBottomNavigationBar(navController: NavHostController) {
 }
 
 /**
- * Defines the navigation graph for the dashboard tabs.
- * Manages the lifecycle of ViewModels used within these tabs.
+ * The inner Navigation Graph for the Dashboard.
+ * 
+ * Maps specific routes to their corresponding Tab Composables. 
+ * ViewModels are instantiated here to control their lifecycle relative to the Dashboard.
  *
- * @param navController The navigation controller managing the tab stack.
- * @param onLogout Passed down to the Profile tab.
+ * @param navController The controller used for tab switching.
+ * @param onLogout Callback for logout events.
  */
 @Composable
 fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
-    // PackagesViewModel is shared between the Packages list and the Creator tab
-    // to allow immediate UI updates when a new package is created.
+    // PackagesViewModel is shared between 'Packages' and 'Creator' tabs 
+    // to ensure that creating a package immediately updates the main list.
     val sharedPackagesViewModel: PackagesViewModel = viewModel()
 
     NavHost(
         navController = navController,
         startDestination = BottomNavItem.Packages.route
     ) {
-        // Tab: Package Tracking
+        // Route for the list of packages (sent and received).
         composable(BottomNavItem.Packages.route) {
             PackagesTab(viewModel = sharedPackagesViewModel)
         }
 
-        // Tab: Recent Activity/Notifications
+        // Route for the activity feed / notifications.
         composable(BottomNavItem.Activity.route) {
             val activityViewModel: ActivityViewModel = viewModel()
             ActivityTab(viewModel = activityViewModel)
         }
 
-        // Tab: Create New Shipment
+        // Route for the order creation screen.
         composable(BottomNavItem.Creator.route) {
             CreatorTab(
                 creatorViewModel = viewModel(),
                 packagesViewModel = sharedPackagesViewModel,
                 onFinish = {
-                    // Navigate back to the packages list once an order is successfully created.
+                    // After successfully creating an order, navigate back to the Packages tab.
                     navController.navigate(BottomNavItem.Packages.route) {
                         navController.graph.startDestinationRoute?.let { route ->
                             popUpTo(route) { saveState = true }
@@ -159,12 +171,12 @@ fun DashboardNavGraph(navController: NavHostController, onLogout: () -> Unit) {
             )
         }
 
-        // Tab: QR Scanner for Package Custody Updates
+        // Route for the QR scanner.
         composable(BottomNavItem.Scanner.route) {
             ScannerTab()
         }
 
-        // Tab: User Profile and Settings
+        // Route for user profile, contact management, and logout.
         composable(BottomNavItem.Profile.route) {
             ProfileTab(onLogout = onLogout)
         }

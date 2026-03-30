@@ -72,13 +72,16 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
- * The "Creator" tab UI. Allows users to create a new shipment by providing a name,
- * selecting a receiver, adding a comment, and optionally attaching a photo.
- * Upon successful creation, it displays a QR code that represents the shipment.
+ * The "Creator" tab UI - where users initiate new shipments.
  *
- * @param creatorViewModel The [CreatorViewModel] handling the order creation logic.
- * @param packagesViewModel The [PackagesViewModel] used to refresh the global package list.
- * @param onFinish Callback triggered when the creation process is complete or cancelled.
+ * This screen provides a form to input shipment details (name, receiver, comment) and 
+ * attach a photo. Upon submission, it displays a unique QR code generated for the order.
+ *
+ * Confusing Areas Addressed:
+ * 1. Image capture vs. gallery selection.
+ * 2. Scoping the receiver search list.
+ * 3. FileProvider setup for camera URI.
+ * 4. Handling the result of the document creation launcher.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,35 +92,36 @@ fun CreatorTab(
 ) {
     val context = LocalContext.current
 
-    // Observe state from the ViewModel
+    // Observation of ViewModel states.
     val users by creatorViewModel.users.collectAsState()
     val isLoadingUsers by creatorViewModel.isLoadingUsers.collectAsState()
     val createOrderResult by creatorViewModel.createOrderResult.collectAsState()
     val isCreatingOrder by creatorViewModel.isCreatingOrder.collectAsState()
 
-    // Fetch the list of possible receivers when the tab is loaded
+    // Trigger loading of available receivers when the tab is mounted.
     LaunchedEffect(Unit) {
         creatorViewModel.loadAllUsers()
     }
 
-    // Local UI state for form fields
+    // --- Local Form State ---
     var shipmentName by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
     var selectedUser by remember { mutableStateOf<UserDisplay?>(null) }
     var userSearchQuery by remember { mutableStateOf("") }
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // Visibility states for various UI components
+    // --- Visibility/UI State ---
     var receiverExpanded by remember { mutableStateOf(false) }
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var showQrSheet by remember { mutableStateOf(false) }
 
-    // State for photo capture and QR saving
+    // --- Temporary Storage for System Intents ---
     var photoUri by remember { mutableStateOf<Uri?>(null) }
     var qrBitmapToSave by remember { mutableStateOf<Bitmap?>(null) }
 
     /**
-     * Clears all local form state and triggers the finish callback.
+     * Resets the entire form and navigates back to the main list.
+     * Used after a successful save or when the user closes the success dialog.
      */
     val resetFormAndFinish = {
         shipmentName = ""
@@ -130,13 +134,16 @@ fun CreatorTab(
         onFinish()
     }
 
-    // Launcher for saving the generated QR code to a file
+    // --- System Activity Launchers ---
+
+    // 1. Launcher to save the generated QR code to the device storage using ACTION_CREATE_DOCUMENT.
     val saveQrLauncher = rememberLauncherForActivityResult(
         contract = CreateDocumentWithName("image/*")
     ) { uri ->
         uri?.let {
             qrBitmapToSave?.let { bitmap ->
                 try {
+                    // Open an output stream to the user-selected URI and compress the bitmap into it.
                     context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                         bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                     }
@@ -148,18 +155,19 @@ fun CreatorTab(
         }
     }
 
-    // Launcher for capturing a photo with the camera
+    // 2. Launcher for the system camera app.
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
             photoUri?.let { uri ->
+                // Once the photo is saved at the URI, load it into a Bitmap for display in the UI.
                 selectedBitmap = loadBitmapFromUri(context, uri)
             }
         }
     }
 
-    // Launcher for picking an image from the gallery
+    // 3. Launcher for picking an image from the device's gallery.
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -168,11 +176,12 @@ fun CreatorTab(
         }
     }
 
-    // Launcher for requesting camera permission
+    // 4. Launcher for requesting runtime Camera permission.
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            // If granted, proceed with launching the camera.
             val file = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             photoUri = uri
@@ -181,21 +190,24 @@ fun CreatorTab(
     }
 
     /**
-     * Helper to initiate the camera capture process, checking for permissions first.
+     * Handles the logic of starting the camera, including permission checks and URI generation.
      */
     fun launchCamera() {
         val permission = Manifest.permission.CAMERA
         if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+            // Create a temporary file in the cache directory to hold the high-res image.
             val file = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+            // Convert file to a content URI using FileProvider for security.
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             photoUri = uri
             cameraLauncher.launch(uri)
         } else {
+            // Request permission if not already granted.
             cameraPermissionLauncher.launch(permission)
         }
     }
 
-    // Filter users list based on the search query typed in the receiver field
+    // Filter available users based on the current search query.
     val filteredUsers = remember(userSearchQuery, users) {
         if (userSearchQuery.isBlank()) {
             users
@@ -211,7 +223,7 @@ fun CreatorTab(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Field: Shipment Name
+        // Field: Order Title
         OutlinedTextField(
             value = shipmentName,
             onValueChange = { shipmentName = it },
@@ -222,7 +234,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Field: Sender (Read-only, shows current user's email)
+        // Field: Sender (Immutable, shows the currently logged-in user)
         OutlinedTextField(
             value = ApiService.currentUser?.email ?: "Loading...",
             onValueChange = { },
@@ -238,7 +250,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Field: Receiver (Dropdown with search capability)
+        // Field: Receiver (Dropdown with search-as-you-type)
         ExposedDropdownMenuBox(
             expanded = receiverExpanded,
             onExpandedChange = { receiverExpanded = it },
@@ -248,7 +260,7 @@ fun CreatorTab(
                 value = userSearchQuery,
                 onValueChange = {
                     userSearchQuery = it
-                    // If user starts typing, clear the previous selection if it no longer matches
+                    // Reset the formal 'selected' state if the user starts typing something else.
                     if (selectedUser != null && !selectedUser!!.email.contains(
                             it,
                             ignoreCase = true
@@ -262,15 +274,12 @@ fun CreatorTab(
                     .fillMaxWidth()
                     .menuAnchor(),
                 readOnly = false,
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = receiverExpanded)
-                },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = receiverExpanded) },
                 isError = selectedUser == null && shipmentName.isNotBlank()
             )
 
+            // The dropdown menu content.
             if (isLoadingUsers) {
                 DropdownMenuItem(
                     text = { CircularProgressIndicator(modifier = Modifier.size(20.dp)) },
@@ -305,7 +314,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Field: Comment/Description
+        // Field: Large Comment Box
         OutlinedTextField(
             value = comment,
             onValueChange = { comment = it },
@@ -318,15 +327,13 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Component: Photo Selector (Camera/Gallery)
+        // Photo Attachment Area
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(150.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .border(
                     1.dp,
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -361,10 +368,11 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Button: Create Order and show QR
+        // Main Submit Button
         Button(
             onClick = {
                 selectedUser?.let { user ->
+                    // Convert the bitmap into a Base64 string for network transmission.
                     val photoBase64 = selectedBitmap?.let { bitmap ->
                         val baos = ByteArrayOutputStream()
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
@@ -374,7 +382,7 @@ fun CreatorTab(
                     creatorViewModel.createOrder(
                         receiverId = user.id,
                         name = shipmentName,
-                        meta = "", // meta can be empty as we use photo field
+                        meta = "", 
                         comment = comment,
                         photoBase64 = photoBase64
                     )
@@ -399,7 +407,9 @@ fun CreatorTab(
         Spacer(modifier = Modifier.height(32.dp))
     }
 
-    // Dialog for picking image source
+    // --- Sub-Dialogs and Overlays ---
+
+    // Source Picker: Camera or Gallery?
     if (showImageSourceDialog) {
         AlertDialog(
             onDismissRequest = { showImageSourceDialog = false },
@@ -413,8 +423,7 @@ fun CreatorTab(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clickable {
-                                showImageSourceDialog = false
-                                launchCamera()
+                                showImageSourceDialog = false; launchCamera()
                             }
                             .padding(16.dp)
                     ) {
@@ -431,8 +440,7 @@ fun CreatorTab(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .clickable {
-                                showImageSourceDialog = false
-                                galleryLauncher.launch("image/*")
+                                showImageSourceDialog = false; galleryLauncher.launch("image/*")
                             }
                             .padding(16.dp)
                     ) {
@@ -448,14 +456,14 @@ fun CreatorTab(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showImageSourceDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = {
+                    showImageSourceDialog = false
+                }) { Text("Cancel") }
             }
         )
     }
 
-    // Dialog/Sheet showing the result of the order creation (QR code or error)
+    // Result Overlay: Show the new shipment's QR code or an error message.
     if (showQrSheet && createOrderResult != null) {
         Dialog(
             onDismissRequest = resetFormAndFinish,
@@ -466,9 +474,7 @@ fun CreatorTab(
                     .fillMaxWidth(0.9f)
                     .padding(vertical = 32.dp),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier
@@ -478,10 +484,7 @@ fun CreatorTab(
                 ) {
                     when (val result = createOrderResult) {
                         is CreateOrderResult.Success -> {
-                            LaunchedEffect(result) {
-                                // Update the global packages list once a new one is created
-                                packagesViewModel?.refreshPackages()
-                            }
+                            LaunchedEffect(result) { packagesViewModel?.refreshPackages() }
                             Text(
                                 text = "Shipment Ready",
                                 style = MaterialTheme.typography.headlineSmall,
@@ -494,9 +497,7 @@ fun CreatorTab(
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-
                             Spacer(modifier = Modifier.height(32.dp))
-
                             Box(
                                 modifier = Modifier
                                     .size(280.dp)
@@ -509,30 +510,23 @@ fun CreatorTab(
                                     modifier = Modifier.size(240.dp)
                                 )
                             }
-
                             Spacer(modifier = Modifier.height(32.dp))
-
                             Text(
                                 text = "Name: ${result.order.name}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-
                             Spacer(modifier = Modifier.height(32.dp))
-
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                TextButton(
-                                    onClick = {
-                                        (createOrderResult as? CreateOrderResult.Success)?.let { result ->
-                                            qrBitmapToSave = result.qrBitmap
-                                            saveQrLauncher.launch("QR_${result.order.id}.png")
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
+                                TextButton(onClick = {
+                                    (createOrderResult as? CreateOrderResult.Success)?.let { successResult ->
+                                        qrBitmapToSave = successResult.qrBitmap
+                                        saveQrLauncher.launch("QR_${successResult.order.id}.png")
+                                    }
+                                }, modifier = Modifier.weight(1f)) {
                                     Text("Save", style = MaterialTheme.typography.titleMedium)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -558,14 +552,9 @@ fun CreatorTab(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(24.dp))
-                            Button(
-                                onClick = {
-                                    showQrSheet = false
-                                    creatorViewModel.clearCreateResult()
-                                }
-                            ) {
-                                Text("Close")
-                            }
+                            Button(onClick = {
+                                showQrSheet = false; creatorViewModel.clearCreateResult()
+                            }) { Text("Close") }
                         }
                         null -> { }
                     }
@@ -576,13 +565,14 @@ fun CreatorTab(
 }
 
 /**
- * Loads a [Bitmap] from a given [Uri] using the content resolver.
- * Uses modern [android.graphics.ImageDecoder] on Pie+ and older [BitmapFactory] on earlier versions.
+ * Loads a [Bitmap] from a given [Uri] while handling API version differences.
+ * Decodes the image into software memory for compatibility with most image processing tools.
  */
 private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? {
     return try {
         context.contentResolver.openInputStream(uri)?.use { inputStream ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // Use modern ImageDecoder for newer Android versions.
                 android.graphics.ImageDecoder.decodeBitmap(
                     android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
                 ) { decoder, _, _ ->
@@ -590,6 +580,7 @@ private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitma
                     decoder.isMutableRequired = true
                 }
             } else {
+                // Fallback to legacy BitmapFactory for older devices.
                 BitmapFactory.decodeStream(inputStream)
             }
         }
@@ -600,7 +591,8 @@ private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitma
 }
 
 /**
- * A custom [ActivityResultContract] to create a document with a specific default filename.
+ * A custom [ActivityResultContract] to trigger the system document creation picker
+ * with a pre-filled default filename.
  */
 private class CreateDocumentWithName(mimeType: String) : androidx.activity.result.contract.ActivityResultContract<String, android.net.Uri?>() {
     private val mimeType_ = mimeType

@@ -42,37 +42,51 @@ import androidx.compose.ui.unit.dp
 import app.cryptoseal.tabs.PackagesViewModel
 
 /**
- * UI representation of a package in the list.
+ * UI representation of a package in the list, used specifically for the UI layer.
  *
- * @property id Unique identifier for the package.
- * @property name Human-readable name of the package.
- * @property status Current delivery status.
- * @property isSentByMe True if the current user is the sender, false if receiver.
+ * @property id Unique identifier for the package (Order ID).
+ * @property name Human-readable name or title of the package.
+ * @property status Current delivery status (e.g., "SENT", "IN_TRANSIT", "DELIVERED").
+ * @property isSentByMe True if the current user is the one who created/sent the package.
  */
 data class PackageItem(val id: String, val name: String, val status: String, val isSentByMe: Boolean)
 
 /**
- * The main screen for the "Packages" tab.
- * Displays a list of packages categorized into "Sent" and "Received" using a segmented control.
+ * The main UI screen for the "Packages" tab.
+ * 
+ * This screen displays a list of packages associated with the user, categorized into 
+ * "Sent" (outbound) and "Received" (inbound) packages using a segmented toggle.
+ * 
+ * Confusing Areas Addressed:
+ * 1. Categorization logic: Packages are filtered locally based on the user's role.
+ * 2. Detail selection: Uses a nullable state 'selectedPackage' to trigger the [PackageSheet].
+ * 3. Reactive updates: Collected from a single source of truth in the ViewModel.
  *
- * @param viewModel The [PackagesViewModel] that provides data and handles logic for this screen.
+ * @param viewModel The shared [PackagesViewModel] providing state and data refresh logic.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PackagesTab(
     viewModel: PackagesViewModel
 ) {
+    // Observing the current tab selection (Sent vs Received).
     val selectedIndex by viewModel.selectedTab.collectAsState()
+
+    // Observing the master list of all packages.
     val allPackages by viewModel.allPackages.collectAsState()
+
+    // Observing the refresh status for showing the loading indicator.
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // Trigger a refresh when the tab is first composed.
+    // Side Effect: Trigger a background refresh of the package list when the tab is first opened.
     LaunchedEffect(Unit) {
         viewModel.refreshPackages()
     }
 
+    // Static labels for the segmented control.
     val options = listOf("Sent", "Received")
-    // State to track which package is currently selected for detail view (bottom sheet/dialog).
+
+    // Local state to track which package the user has clicked on for more details.
     var selectedPackage by remember { mutableStateOf<PackageItem?>(null) }
 
     Scaffold { padding ->
@@ -82,7 +96,7 @@ fun PackagesTab(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Segmented control to switch between Sent and Received packages.
+            // Segmented toggle to switch between Sent (Index 0) and Received (Index 1) categories.
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -102,22 +116,27 @@ fun PackagesTab(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Main Content Area: Loading, Empty, or List.
             if (isLoading && allPackages.isEmpty()) {
-                // Show loading indicator if data is being fetched and list is currently empty.
+                // Initial Loading State: Show a centered spinner.
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
-                // Filter packages based on whether "Sent" or "Received" is selected.
+                // Filtering Logic: 
+                // index 0 -> packages where I am the sender.
+                // index 1 -> packages where I am the receiver.
                 val currentList = allPackages.filter { pkg ->
                     if (selectedIndex == 0) pkg.isSentByMe else !pkg.isSentByMe
                 }
 
                 if (currentList.isEmpty()) {
+                    // Empty State: Display a message if no packages match the selected category.
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No packages found", style = MaterialTheme.typography.bodyLarge)
                     }
                 } else {
+                    // Result List: Displayed in a vertical scrollable column.
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(bottom = 16.dp)
@@ -134,11 +153,12 @@ fun PackagesTab(
         }
     }
 
-    // Ensure the sheet uses the latest data from the state flow when the status changes.
-    // If a status update happens, the list in VM changes, and we find the updated version here.
+    // Dynamic Detail Resolution:
+    // If a package is selected, find its latest state from the 'allPackages' flow.
+    // This ensures that if the status changes while the sheet is open, the sheet reflects it.
     val packageToShow = allPackages.find { it.id == selectedPackage?.id } ?: selectedPackage
 
-    // Show the detail sheet if a package is selected.
+    // Overlay: Show the detailed [PackageSheet] when a package is selected.
     packageToShow?.let { pkg ->
         PackageSheet(
             pkg = pkg,
@@ -149,11 +169,14 @@ fun PackagesTab(
 }
 
 /**
- * A single item in the package list.
- * Displays an icon indicating direction (sent/received), package name, and status.
+ * A visually themed card representing a single package in the list.
+ * 
+ * It uses icons to denote directionality:
+ * - North-east arrow (CallMade) for Sent.
+ * - South-west arrow (CallReceived) for Received.
  *
- * @param pkg The package data to display.
- * @param onClick Callback triggered when the item is tapped.
+ * @param pkg The [PackageItem] data to display.
+ * @param onClick Event triggered when the user taps on the package card.
  */
 @Composable
 fun PackageListItem(pkg: PackageItem, onClick: () -> Unit) {
@@ -171,19 +194,20 @@ fun PackageListItem(pkg: PackageItem, onClick: () -> Unit) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Outbound icon for sent, Inbound icon for received.
+            // Contextual icon based on the package direction.
             val icon = if (pkg.isSentByMe) Icons.Default.CallMade else Icons.Default.CallReceived
             val iconTint = if (pkg.isSentByMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
 
             Icon(
                 imageVector = icon,
-                contentDescription = "Package Direction",
+                contentDescription = if (pkg.isSentByMe) "Sent Package" else "Received Package",
                 tint = iconTint,
                 modifier = Modifier.size(24.dp)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // Text column: Name and Status.
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = pkg.name,
@@ -197,6 +221,7 @@ fun PackageListItem(pkg: PackageItem, onClick: () -> Unit) {
                 )
             }
 
+            // Trailing arrow to indicate that the item is clickable for more details.
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "View Details",
