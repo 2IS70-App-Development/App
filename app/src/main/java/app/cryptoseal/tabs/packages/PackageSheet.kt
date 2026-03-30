@@ -67,6 +67,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * A detailed view for a single package, typically shown as a full-screen dialog.
+ * Displays the "Chain of Custody" (scan history) and provides actions like marking as delivered or cancelling.
+ *
+ * @param pkg The package item to display details for.
+ * @param viewModel The shared [PackagesViewModel] to fetch scans and update status.
+ * @param onDismiss Callback to close the sheet.
+ */
 @Composable
 fun PackageSheet(
     pkg: PackageItem,
@@ -79,16 +87,19 @@ fun PackageSheet(
     val users by viewModel.users.collectAsState()
     val scope = rememberCoroutineScope()
 
+    // Fetch scan history whenever the package ID changes.
     LaunchedEffect(pkg.id) {
         viewModel.fetchScans(pkg.id.toInt())
     }
 
+    // Listen for toast messages from the ViewModel and display them.
     LaunchedEffect(Unit) {
         viewModel.toastMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
+    // Local UI states for various sub-dialogs.
     var selectedScanForDetails by remember { mutableStateOf<Scan?>(null) }
     var qrBitmapToShow by remember { mutableStateOf<Bitmap?>(null) }
     var showConfirmationDialog by remember { mutableStateOf<String?>(null) }
@@ -112,7 +123,7 @@ fun PackageSheet(
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                // Header Information
+                // Header Information: Package name, current status, and QR code trigger.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -131,6 +142,7 @@ fun PackageSheet(
                     }
                     IconButton(onClick = {
                         scope.launch {
+                            // Generate QR code for the package ID to allow scanning by others.
                             qrBitmapToShow = viewModel.generateQrCode(pkg.id)
                         }
                     }) {
@@ -174,13 +186,14 @@ fun PackageSheet(
                         )
                     }
                 } else {
-                    // The Scrollable Timeline
+                    // The Scrollable Timeline: Displays all handovers/checks for this package.
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
                     ) {
                         itemsIndexed(scans) { index, scan ->
+                            // Resolve the courier's email from the cached user list.
                             val courierEmail = users.find { it.id == scan.courierId }?.email
                                 ?: "ID: ${scan.courierId}"
                             TimelineNode(
@@ -195,7 +208,7 @@ fun PackageSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action Buttons
+                // Action Buttons: Logic to show "Cancel" (sender only) or "Mark Delivered" (receiver only).
                 val canCancel =
                     pkg.isSentByMe && pkg.status.lowercase() != "cancelled" && pkg.status.lowercase() != "delivered"
                 val canMarkDelivered =
@@ -229,7 +242,7 @@ fun PackageSheet(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Close Button
+                // Close Button for the main dialog.
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
@@ -240,6 +253,7 @@ fun PackageSheet(
         }
     }
 
+    // Confirmation dialog before performing destructive or final actions.
     showConfirmationDialog?.let { targetStatus ->
         AlertDialog(
             onDismissRequest = { showConfirmationDialog = null },
@@ -268,10 +282,12 @@ fun PackageSheet(
         )
     }
 
+    // Show details for a specific scan when a timeline node is clicked.
     selectedScanForDetails?.let { scan ->
         ScanDetailsDialog(scan = scan, onDismiss = { selectedScanForDetails = null })
     }
 
+    // Full-screen QR code display for easy scanning.
     qrBitmapToShow?.let { bitmap ->
         QRDisplayDialog(
             bitmap = bitmap,
@@ -282,6 +298,10 @@ fun PackageSheet(
     }
 }
 
+/**
+ * A dialog that displays the generated QR code for a package.
+ * Allows the user to save the QR code image to their device's gallery.
+ */
 @Composable
 fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -367,6 +387,12 @@ fun QRDisplayDialog(bitmap: Bitmap, packageName: String, packageId: String, onDi
     }
 }
 
+/**
+ * Saves a Bitmap to the device's public "Pictures/CryptoSeal" directory.
+ * Uses MediaStore for compatibility across different Android versions.
+ *
+ * @return True if the image was successfully saved, false otherwise.
+ */
 suspend fun saveQrToGallery(
     context: android.content.Context,
     bitmap: Bitmap,
@@ -396,6 +422,15 @@ suspend fun saveQrToGallery(
     }
 }
 
+/**
+ * A single entry in the chain of custody timeline.
+ * Consists of a vertical line, a dot, and textual details about the scan.
+ *
+ * @param scan The scan data to display.
+ * @param courierEmail The email of the person who performed the scan.
+ * @param isLast True if this is the latest scan, which suppresses the bottom connector line.
+ * @param onShowDetails Callback to show more detailed information (photo, location).
+ */
 @Composable
 fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetails: () -> Unit) {
     Row(
@@ -459,6 +494,10 @@ fun TimelineNode(scan: Scan, courierEmail: String, isLast: Boolean, onShowDetail
     }
 }
 
+/**
+ * A dialog that shows fine-grained details of a scan, including the photo taken at that time.
+ * Decodes the Base64 photo string into a Bitmap for display.
+ */
 @Composable
 fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
@@ -472,6 +511,7 @@ fun ScanDetailsDialog(scan: Scan, onDismiss: () -> Unit) {
                 Text("Scan Details", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // If a photo exists for this scan, decode it from Base64.
                 if (!scan.photo.isNullOrEmpty()) {
                     val bitmap = remember(scan.photo) {
                         try {

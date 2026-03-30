@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -38,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,10 +46,19 @@ import androidx.compose.ui.unit.dp
 import app.cryptoseal.data.api.ApiService
 import app.cryptoseal.data.model.User
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
+/**
+ * UI representation of a contact for display purposes.
+ */
 data class Contact(val contactId: Int, val email: String)
 
+/**
+ * The "Profile" tab UI.
+ * Displays the current user's information, provides a logout option,
+ * and manages a list of saved contacts.
+ *
+ * @param onLogout Callback triggered when the user successfully logs out.
+ */
 @Composable
 fun ProfileTab(onLogout: () -> Unit) {
     val currentUser = ApiService.currentUser
@@ -60,11 +68,15 @@ fun ProfileTab(onLogout: () -> Unit) {
 
     val scope = rememberCoroutineScope()
 
+    /**
+     * Fetches the user's contact list and resolves their emails from the server.
+     */
     fun loadContacts() {
         scope.launch {
             isLoading = true
             ApiService.getContacts().fold(
                 onSuccess = { contactList ->
+                    // Resolve contact emails by fetching user details for each contact ID.
                     val displays = contactList.mapNotNull { contact ->
                         ApiService.getUserDetails(contact.contactId).getOrNull()?.let { user ->
                             Contact(contact.contactId, user.email)
@@ -78,10 +90,12 @@ fun ProfileTab(onLogout: () -> Unit) {
         }
     }
 
+    // Refresh contacts when the screen is first displayed.
     LaunchedEffect(Unit) {
         loadContacts()
     }
 
+    // Display the contact search/addition dialog.
     if (showAddContactDialog) {
         AddContactDialog(
             currentUserId = currentUser?.id,
@@ -99,6 +113,7 @@ fun ProfileTab(onLogout: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Section: User Profile Header
         item {
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -145,6 +160,7 @@ fun ProfileTab(onLogout: () -> Unit) {
                         }
                     }
 
+                    // Logout Button
                     IconButton(onClick = {
                         ApiService.logout()
                         onLogout()
@@ -159,6 +175,7 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         }
 
+        // Section: Contact Details
         item {
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -208,6 +225,7 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         }
 
+        // Section Header: Saved Contacts
         item {
             Column {
                 Spacer(modifier = Modifier.height(32.dp))
@@ -230,6 +248,7 @@ fun ProfileTab(onLogout: () -> Unit) {
             }
         }
 
+        // List of Contacts or Loading Indicator
         if (isLoading) {
             item {
                 Box(
@@ -252,6 +271,13 @@ fun ProfileTab(onLogout: () -> Unit) {
     }
 }
 
+/**
+ * A single item in the saved contacts list.
+ * Displays the contact's email and a delete button.
+ *
+ * @param contact The contact data to display.
+ * @param onRemove Callback triggered after the contact is successfully removed.
+ */
 @Composable
 fun ContactListItem(contact: Contact, onRemove: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -280,6 +306,7 @@ fun ContactListItem(contact: Contact, onRemove: () -> Unit) {
 
             IconButton(onClick = {
                 scope.launch {
+                    // Remove contact via API then trigger local UI refresh.
                     ApiService.removeContact(contact.contactId).onSuccess { onRemove() }
                 }
             }) {
@@ -293,6 +320,13 @@ fun ContactListItem(contact: Contact, onRemove: () -> Unit) {
     }
 }
 
+/**
+ * A dialog that allows users to search for and add other users to their contacts.
+ *
+ * @param currentUserId The ID of the currently logged-in user, used to filter them out of search results.
+ * @param onDismiss Callback to close the dialog.
+ * @param onContactAdded Callback triggered when a contact is successfully added.
+ */
 @Composable
 fun AddContactDialog(
     currentUserId: Int?,
@@ -305,9 +339,11 @@ fun AddContactDialog(
     var selectedUser by remember { mutableStateOf<User?>(null) }
     var isAdding by remember { mutableStateOf(false) }
 
+    // Fetch all users on initialization to enable local searching.
     LaunchedEffect(Unit) {
         ApiService.getUsers().fold(
             onSuccess = { userList ->
+                // Filter out the current user as they cannot add themselves as a contact.
                 users = userList.filter { it.id != currentUserId }
             },
             onFailure = { }
@@ -315,6 +351,7 @@ fun AddContactDialog(
         isLoading = false
     }
 
+    // Filter the user list based on the search query entered in the text field.
     val filteredUsers = remember(searchQuery, users) {
         if (searchQuery.isBlank()) {
             emptyList()
@@ -386,6 +423,7 @@ fun AddContactDialog(
         }
     )
 
+    // Automatically trigger the API call to add a contact when a user is selected from the list.
     LaunchedEffect(selectedUser) {
         selectedUser?.let { user ->
             isAdding = true

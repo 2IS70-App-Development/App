@@ -71,6 +71,15 @@ import app.cryptoseal.tabs.PackagesViewModel
 import java.io.ByteArrayOutputStream
 import java.io.File
 
+/**
+ * The "Creator" tab UI. Allows users to create a new shipment by providing a name,
+ * selecting a receiver, adding a comment, and optionally attaching a photo.
+ * Upon successful creation, it displays a QR code that represents the shipment.
+ *
+ * @param creatorViewModel The [CreatorViewModel] handling the order creation logic.
+ * @param packagesViewModel The [PackagesViewModel] used to refresh the global package list.
+ * @param onFinish Callback triggered when the creation process is complete or cancelled.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatorTab(
@@ -80,29 +89,36 @@ fun CreatorTab(
 ) {
     val context = LocalContext.current
 
+    // Observe state from the ViewModel
     val users by creatorViewModel.users.collectAsState()
     val isLoadingUsers by creatorViewModel.isLoadingUsers.collectAsState()
     val createOrderResult by creatorViewModel.createOrderResult.collectAsState()
     val isCreatingOrder by creatorViewModel.isCreatingOrder.collectAsState()
 
+    // Fetch the list of possible receivers when the tab is loaded
     LaunchedEffect(Unit) {
         creatorViewModel.loadAllUsers()
     }
 
+    // Local UI state for form fields
     var shipmentName by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
     var selectedUser by remember { mutableStateOf<UserDisplay?>(null) }
     var userSearchQuery by remember { mutableStateOf("") }
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
+    // Visibility states for various UI components
     var receiverExpanded by remember { mutableStateOf(false) }
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var showQrSheet by remember { mutableStateOf(false) }
 
+    // State for photo capture and QR saving
     var photoUri by remember { mutableStateOf<Uri?>(null) }
     var qrBitmapToSave by remember { mutableStateOf<Bitmap?>(null) }
 
-    // Helper to clear form and navigate back
+    /**
+     * Clears all local form state and triggers the finish callback.
+     */
     val resetFormAndFinish = {
         shipmentName = ""
         comment = ""
@@ -114,6 +130,7 @@ fun CreatorTab(
         onFinish()
     }
 
+    // Launcher for saving the generated QR code to a file
     val saveQrLauncher = rememberLauncherForActivityResult(
         contract = CreateDocumentWithName("image/*")
     ) { uri ->
@@ -131,6 +148,7 @@ fun CreatorTab(
         }
     }
 
+    // Launcher for capturing a photo with the camera
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -141,6 +159,7 @@ fun CreatorTab(
         }
     }
 
+    // Launcher for picking an image from the gallery
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -149,6 +168,7 @@ fun CreatorTab(
         }
     }
 
+    // Launcher for requesting camera permission
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -160,6 +180,9 @@ fun CreatorTab(
         }
     }
 
+    /**
+     * Helper to initiate the camera capture process, checking for permissions first.
+     */
     fun launchCamera() {
         val permission = Manifest.permission.CAMERA
         if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
@@ -172,6 +195,7 @@ fun CreatorTab(
         }
     }
 
+    // Filter users list based on the search query typed in the receiver field
     val filteredUsers = remember(userSearchQuery, users) {
         if (userSearchQuery.isBlank()) {
             users
@@ -187,6 +211,7 @@ fun CreatorTab(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Field: Shipment Name
         OutlinedTextField(
             value = shipmentName,
             onValueChange = { shipmentName = it },
@@ -197,6 +222,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Field: Sender (Read-only, shows current user's email)
         OutlinedTextField(
             value = ApiService.currentUser?.email ?: "Loading...",
             onValueChange = { },
@@ -212,6 +238,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Field: Receiver (Dropdown with search capability)
         ExposedDropdownMenuBox(
             expanded = receiverExpanded,
             onExpandedChange = { receiverExpanded = it },
@@ -221,6 +248,7 @@ fun CreatorTab(
                 value = userSearchQuery,
                 onValueChange = {
                     userSearchQuery = it
+                    // If user starts typing, clear the previous selection if it no longer matches
                     if (selectedUser != null && !selectedUser!!.email.contains(
                             it,
                             ignoreCase = true
@@ -277,6 +305,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Field: Comment/Description
         OutlinedTextField(
             value = comment,
             onValueChange = { comment = it },
@@ -289,6 +318,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Component: Photo Selector (Camera/Gallery)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -331,6 +361,7 @@ fun CreatorTab(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // Button: Create Order and show QR
         Button(
             onClick = {
                 selectedUser?.let { user ->
@@ -368,6 +399,7 @@ fun CreatorTab(
         Spacer(modifier = Modifier.height(32.dp))
     }
 
+    // Dialog for picking image source
     if (showImageSourceDialog) {
         AlertDialog(
             onDismissRequest = { showImageSourceDialog = false },
@@ -423,6 +455,7 @@ fun CreatorTab(
         )
     }
 
+    // Dialog/Sheet showing the result of the order creation (QR code or error)
     if (showQrSheet && createOrderResult != null) {
         Dialog(
             onDismissRequest = resetFormAndFinish,
@@ -446,6 +479,7 @@ fun CreatorTab(
                     when (val result = createOrderResult) {
                         is CreateOrderResult.Success -> {
                             LaunchedEffect(result) {
+                                // Update the global packages list once a new one is created
                                 packagesViewModel?.refreshPackages()
                             }
                             Text(
@@ -541,6 +575,10 @@ fun CreatorTab(
     }
 }
 
+/**
+ * Loads a [Bitmap] from a given [Uri] using the content resolver.
+ * Uses modern [android.graphics.ImageDecoder] on Pie+ and older [BitmapFactory] on earlier versions.
+ */
 private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? {
     return try {
         context.contentResolver.openInputStream(uri)?.use { inputStream ->
@@ -561,6 +599,9 @@ private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitma
     }
 }
 
+/**
+ * A custom [ActivityResultContract] to create a document with a specific default filename.
+ */
 private class CreateDocumentWithName(mimeType: String) : androidx.activity.result.contract.ActivityResultContract<String, android.net.Uri?>() {
     private val mimeType_ = mimeType
     override fun createIntent(context: android.content.Context, input: String) =

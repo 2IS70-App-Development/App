@@ -12,6 +12,10 @@ private val CryptoSealDarkNavy = Color(0xFF09141E)    // Very dark navy for the 
 private val CryptoSealSurfaceNavy = Color(0xFF132738) // Slightly lighter navy for cards and dialogs
 private val CryptoSealTextWhite = Color(0xFFE5F7F5)   // Cyan-tinted white for text readability
 
+/**
+ * The primary dark color scheme for the CryptoSeal application.
+ * Utilizes a professional navy and cyan palette for a modern, secure look.
+ */
 private val DarkColorPalette = darkColorScheme(
     primary = CryptoSealCyan,
     secondary = CryptoSealSteelBlue,
@@ -23,6 +27,12 @@ private val DarkColorPalette = darkColorScheme(
     onSurface = CryptoSealTextWhite
 )
 
+/**
+ * CryptoSealTheme provides the Material 3 styling for the entire application.
+ * It currently only supports a Dark mode to match the application's branding.
+ *
+ * @param content The composable content to be styled by this theme.
+ */
 @Composable
 fun CryptoSealTheme(content: @Composable () -> Unit) {
     MaterialTheme(

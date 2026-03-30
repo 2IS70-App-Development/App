@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddBox
@@ -38,6 +37,13 @@ import androidx.compose.ui.unit.dp
 import app.cryptoseal.data.model.Activity
 import app.cryptoseal.util.DateTimeUtils
 
+/**
+ * The "Activity" tab UI.
+ * Displays a chronological list of events related to the user's packages and scans.
+ * Supports pull-to-refresh to fetch the latest updates.
+ *
+ * @param viewModel The [ActivityViewModel] providing the activity data.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityTab(viewModel: ActivityViewModel) {
@@ -66,6 +72,7 @@ fun ActivityTab(viewModel: ActivityViewModel) {
                 )
             }
 
+            // Empty state UI
             if (activities.isEmpty() && !isLoading) {
                 item {
                     Box(
@@ -91,6 +98,12 @@ fun ActivityTab(viewModel: ActivityViewModel) {
     }
 }
 
+/**
+ * A single row in the activity list, representing a system event.
+ * Displays an icon specific to the event type, a summary message, and a timestamp.
+ *
+ * @param activity The activity data to display.
+ */
 @Composable
 fun ActivityItem(activity: Activity) {
     Row(
@@ -99,13 +112,13 @@ fun ActivityItem(activity: Activity) {
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 1. Leading Icon (Event Type)
+        // 1. Leading Icon (Determined by Event Type)
         val (icon, color) = when (activity.type) {
             "order_created" -> Icons.Default.AddBox to MaterialTheme.colorScheme.primary
             "order_received" -> Icons.Default.Inbox to MaterialTheme.colorScheme.secondary
             "status_changed" -> Icons.Default.Edit to MaterialTheme.colorScheme.tertiary
-            "scan_created" -> Icons.Default.QrCodeScanner to Color(0xFF03A9F4) // Info-like color
-            "scan_added" -> Icons.Default.LibraryAdd to Color(0xFF4CAF50) // Success-like color
+            "scan_created" -> Icons.Default.QrCodeScanner to Color(0xFF03A9F4)
+            "scan_added" -> Icons.Default.LibraryAdd to Color(0xFF4CAF50)
             else -> Icons.Default.Notifications to MaterialTheme.colorScheme.outline
         }
 
@@ -125,7 +138,7 @@ fun ActivityItem(activity: Activity) {
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        // 2. Text Details
+        // 2. Text Details: Event summary and relative time.
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = activity.summary,
@@ -140,7 +153,7 @@ fun ActivityItem(activity: Activity) {
         }
     }
 
-    // 3. Subtle Divider
+    // 3. Subtle Divider between items.
     HorizontalDivider(
         modifier = Modifier.padding(start = 56.dp, top = 12.dp),
         thickness = 1.dp,

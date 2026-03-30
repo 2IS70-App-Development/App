@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -42,8 +41,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.cryptoseal.tabs.PackagesViewModel
 
+/**
+ * UI representation of a package in the list.
+ *
+ * @property id Unique identifier for the package.
+ * @property name Human-readable name of the package.
+ * @property status Current delivery status.
+ * @property isSentByMe True if the current user is the sender, false if receiver.
+ */
 data class PackageItem(val id: String, val name: String, val status: String, val isSentByMe: Boolean)
 
+/**
+ * The main screen for the "Packages" tab.
+ * Displays a list of packages categorized into "Sent" and "Received" using a segmented control.
+ *
+ * @param viewModel The [PackagesViewModel] that provides data and handles logic for this screen.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PackagesTab(
@@ -53,11 +66,13 @@ fun PackagesTab(
     val allPackages by viewModel.allPackages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    // Trigger a refresh when the tab is first composed.
     LaunchedEffect(Unit) {
         viewModel.refreshPackages()
     }
 
     val options = listOf("Sent", "Received")
+    // State to track which package is currently selected for detail view (bottom sheet/dialog).
     var selectedPackage by remember { mutableStateOf<PackageItem?>(null) }
 
     Scaffold { padding ->
@@ -67,6 +82,7 @@ fun PackagesTab(
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // Segmented control to switch between Sent and Received packages.
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -87,10 +103,12 @@ fun PackagesTab(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (isLoading && allPackages.isEmpty()) {
+                // Show loading indicator if data is being fetched and list is currently empty.
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
+                // Filter packages based on whether "Sent" or "Received" is selected.
                 val currentList = allPackages.filter { pkg ->
                     if (selectedIndex == 0) pkg.isSentByMe else !pkg.isSentByMe
                 }
@@ -116,9 +134,11 @@ fun PackagesTab(
         }
     }
 
-    // Ensure the sheet uses the latest data from the state flow when the status changes
+    // Ensure the sheet uses the latest data from the state flow when the status changes.
+    // If a status update happens, the list in VM changes, and we find the updated version here.
     val packageToShow = allPackages.find { it.id == selectedPackage?.id } ?: selectedPackage
 
+    // Show the detail sheet if a package is selected.
     packageToShow?.let { pkg ->
         PackageSheet(
             pkg = pkg,
@@ -128,6 +148,13 @@ fun PackagesTab(
     }
 }
 
+/**
+ * A single item in the package list.
+ * Displays an icon indicating direction (sent/received), package name, and status.
+ *
+ * @param pkg The package data to display.
+ * @param onClick Callback triggered when the item is tapped.
+ */
 @Composable
 fun PackageListItem(pkg: PackageItem, onClick: () -> Unit) {
     Card(
@@ -144,6 +171,7 @@ fun PackageListItem(pkg: PackageItem, onClick: () -> Unit) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Outbound icon for sent, Inbound icon for received.
             val icon = if (pkg.isSentByMe) Icons.Default.CallMade else Icons.Default.CallReceived
             val iconTint = if (pkg.isSentByMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
 

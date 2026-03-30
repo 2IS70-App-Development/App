@@ -86,18 +86,24 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
+/**
+ * The main UI for the "Scanner" tab.
+ * Uses CameraX and Google ML Kit to provide a live QR code scanning experience.
+ * Once a package's QR code is detected, it opens a bottom sheet to submit a scan record.
+ *
+ * @param viewModel The [ScannerViewModel] that handles the scanning state and data submission.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // State to track camera permission.
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -107,13 +113,14 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
         )
     }
 
+    // Launcher for camera permission request.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         hasCameraPermission = isGranted
     }
 
-    // Re-check permission when app returns to foreground
+    // Re-check permission whenever the activity resumes (e.g., after returning from settings).
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -129,6 +136,7 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
         }
     }
 
+    // Request permission on first launch if not already granted.
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
@@ -153,6 +161,7 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
             )
 
             if (hasCameraPermission) {
+                // The live camera view with QR detection logic.
                 Card(
                     shape = RoundedCornerShape(24.dp),
                     border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
@@ -176,6 +185,7 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
                         .padding(bottom = 16.dp)
                 )
             } else {
+                // Fallback UI when camera permission is missing.
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.Center,
@@ -209,7 +219,7 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
             }
         }
 
-        // Bottom Sheet for submission
+        // Bottom Sheet showing the scan submission form after a QR code is detected.
         if (viewModel.scannedOrderId != null) {
             ModalBottomSheet(
                 onDismissRequest = { viewModel.resetScanner() },
@@ -220,7 +230,7 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
             }
         }
 
-        // Success Overlay
+        // Overlay shown after a successful scan submission.
         if (viewModel.submitSuccess) {
             Box(
                 modifier = Modifier
@@ -256,12 +266,16 @@ fun ScannerTab(viewModel: ScannerViewModel = viewModel()) {
     }
 }
 
+/**
+ * The form used to submit package scan details (photo, condition, comment).
+ */
 @Composable
 fun ScanSubmissionForm(viewModel: ScannerViewModel) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val conditions = listOf("Good", "Missing", "Damaged")
 
+    // Launcher for taking a quick photo for the scan.
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
@@ -270,6 +284,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
         }
     }
 
+    // Launcher for requesting location permission before submission.
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -301,7 +316,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Condition Selector
+        // Field: Package Condition (Dropdown)
         Text("Package Condition", style = MaterialTheme.typography.labelLarge)
         Box(modifier = Modifier.padding(vertical = 8.dp)) {
             Row(
@@ -331,7 +346,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Photo Selector
+        // Field: Package Photo Capture
         Text("Package Photo", style = MaterialTheme.typography.labelLarge)
         Box(
             modifier = Modifier
@@ -364,7 +379,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Comment
+        // Field: Comment
         OutlinedTextField(
             value = viewModel.comment,
             onValueChange = { viewModel.comment = it },
@@ -375,6 +390,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Display submission errors if any.
         if (viewModel.submitError != null) {
             Text(
                 viewModel.submitError!!,
@@ -383,6 +399,7 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
             )
         }
 
+        // Action: Submit scan with current GPS location.
         Button(
             onClick = {
                 val fineLoc = ContextCompat.checkSelfPermission(
@@ -419,6 +436,11 @@ fun ScanSubmissionForm(viewModel: ScannerViewModel) {
     }
 }
 
+/**
+ * A Composable that hosts the CameraX preview and performs real-time QR code detection.
+ *
+ * @param onBarcodeDetected Callback triggered when a numeric QR code is successfully parsed.
+ */
 @Composable
 fun CameraXLiveScanner(onBarcodeDetected: (Int) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -436,12 +458,14 @@ fun CameraXLiveScanner(onBarcodeDetected: (Int) -> Unit) {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
 
+                    // Configure ML Kit barcode scanner specifically for QR codes.
                     val barcodeScanner = BarcodeScanning.getClient(
-                        BarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                        com.google.mlkit.vision.barcode.BarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
                             .build()
                     )
 
+                    // Setup real-time image analysis.
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -467,11 +491,14 @@ fun CameraXLiveScanner(onBarcodeDetected: (Int) -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Overlay remains the same
+        // Draw a decorative overlay with brackets to guide the user.
         ScannerOverlay()
     }
 }
 
+/**
+ * Analyzes a camera frame for QR codes using ML Kit.
+ */
 @SuppressLint("UnsafeOptInUsageError")
 private fun processImageProxy(
     barcodeScanner: com.google.mlkit.vision.barcode.BarcodeScanner,
@@ -486,7 +513,7 @@ private fun processImageProxy(
                 for (barcode in barcodes) {
                     val rawValue = barcode.rawValue
                     if (rawValue != null) {
-                        // Validate it's a numeric order ID
+                        // We expect the QR code to contain a numeric Order ID.
                         val orderId = rawValue.toIntOrNull()
                         if (orderId != null) {
                             onBarcodeDetected(orderId)
@@ -498,6 +525,7 @@ private fun processImageProxy(
                 Log.e("ScannerTab", "Barcode scanning failed", it)
             }
             .addOnCompleteListener {
+                // Important: Close the proxy so the next frame can be analyzed.
                 imageProxy.close()
             }
     } else {
@@ -505,6 +533,10 @@ private fun processImageProxy(
     }
 }
 
+/**
+ * A custom Canvas overlay that draws a dim background and clear center rectangle
+ * with corner brackets to signify the scanning area.
+ */
 @Composable
 fun ScannerOverlay() {
     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -519,8 +551,10 @@ fun ScannerOverlay() {
         val strokeWidth = 12f
         val bracketColor = Color(0xFF03DAC5)
 
+        // Draw the semi-transparent overlay everywhere.
         drawRect(Color(0x99000000))
 
+        // "Cut out" the center square using Clear blend mode.
         drawRoundRect(
             color = Color.Transparent,
             topLeft = Offset(left, top),
@@ -529,7 +563,9 @@ fun ScannerOverlay() {
             blendMode = BlendMode.Clear
         )
 
+        // Draw corner brackets around the center square.
         val path = Path().apply {
+            // Top-left
             moveTo(left, top + lineLength)
             lineTo(left, top + cornerRadius)
             arcTo(
@@ -540,6 +576,7 @@ fun ScannerOverlay() {
             )
             lineTo(left + lineLength, top)
 
+            // Top-right
             moveTo(left + rectSize - lineLength, top)
             lineTo(left + rectSize - cornerRadius, top)
             arcTo(
@@ -552,6 +589,7 @@ fun ScannerOverlay() {
             )
             lineTo(left + rectSize, top + lineLength)
 
+            // Bottom-right
             moveTo(left + rectSize, top + rectSize - lineLength)
             lineTo(left + rectSize, top + rectSize - cornerRadius)
             arcTo(
@@ -564,6 +602,7 @@ fun ScannerOverlay() {
             )
             lineTo(left + rectSize - lineLength, top + rectSize)
 
+            // Bottom-left
             moveTo(left + lineLength, top + rectSize)
             lineTo(left + cornerRadius, top + rectSize)
             arcTo(
