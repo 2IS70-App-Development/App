@@ -3,6 +3,8 @@ package app.cryptoseal.data.api
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import app.cryptoseal.data.api.ApiService.authToken
+import app.cryptoseal.data.api.ApiService.currentUser
 import app.cryptoseal.data.model.Activity
 import app.cryptoseal.data.model.AuthResponse
 import app.cryptoseal.data.model.Contact
@@ -24,29 +26,60 @@ import java.net.HttpURLConnection
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
+/**
+ * Singleton object responsible for all network communication with the CryptoSeal backend.
+ * It manages authentication tokens, user sessions, and provides high-level functions for
+ * signup, login, order management, and contact operations.
+ *
+ * All functions are designed to be called from a coroutine and perform networking on [Dispatchers.IO].
+ */
 object ApiService {
     private const val TAG = "ApiService"
     private const val BASE_URL = "https://app.dev.libr.live"
     private val gson = Gson()
     private var sessionManager: SessionManager? = null
 
+    /**
+     * Initializes the ApiService with the application context.
+     * This should be called once at application startup.
+     * @param context The application context used by SessionManager for persistent storage.
+     */
     fun initialize(context: Context) {
         sessionManager = SessionManager(context)
         authToken = sessionManager?.authToken
         currentUser = sessionManager?.currentUser
     }
 
+    /**
+     * The currently stored JWT authentication token.
+     * When set, it is automatically added to all authenticated requests.
+     */
     var authToken: String? = null
         private set
 
+    /**
+     * The user profile information of the currently logged-in user.
+     */
     var currentUser: User? = null
         private set
 
+    /**
+     * Reads the response body from an [HttpURLConnection].
+     * Handles both success (2xx) and error streams.
+     * @param conn The open HttpURLConnection to read from.
+     * @return The response body as a String, or an empty string if reading fails.
+     */
     private fun readResponse(conn: HttpURLConnection): String {
         val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
         return stream?.bufferedReader()?.use { it.readText() } ?: ""
     }
 
+    /**
+     * Parses a JSON error response string into a human-readable message.
+     * Falls back to a default message if parsing fails.
+     * @param response The JSON string containing error details.
+     * @param defaultMessage The message to return if parsing fails.
+     */
     private fun parseError(response: String, defaultMessage: String): String {
         return try {
             gson.fromJson(response, ErrorResponse::class.java).error
@@ -55,6 +88,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Creates a new user account with the given email and password.
+     * @return A [Result] containing the created [User] on success.
+     */
     suspend fun signup(email: String, password: String): Result<User> = withContext(Dispatchers.IO) {
         try {
             val url = URL("$BASE_URL/signup")
@@ -79,6 +116,11 @@ object ApiService {
         }
     }
 
+    /**
+     * Authenticates a user and retrieves a JWT token.
+     * On successful login, it updates [authToken], persists it, and fetches the current user's profile.
+     * @return A [Result] containing the JWT access token on success.
+     */
     suspend fun login(email: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         try {
             val url = URL("$BASE_URL/jwt/create")
@@ -107,6 +149,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Fetches the user profile for the given email from the list of all users.
+     * Updates the local [currentUser] state and persists it.
+     */
     private suspend fun fetchCurrentUser(email: String) {
         getUsers().onSuccess { users ->
             currentUser = users.find { it.email == email }
@@ -114,14 +160,27 @@ object ApiService {
         }
     }
 
+    /**
+     * Clears all authentication state, including the token and user profile.
+     * Effectively logs out the user and clears persistent session storage.
+     */
     fun logout() {
         authToken = null
         currentUser = null
         sessionManager?.clear()
     }
 
+    /**
+     * Checks if a user is currently logged in based on the presence of an auth token.
+     */
     fun isLoggedIn(): Boolean = (authToken ?: sessionManager?.authToken) != null
 
+    /**
+     * Prepares an [HttpURLConnection] with required authentication headers.
+     * @param path The relative endpoint path (e.g., "/auth/orders").
+     * @param method The HTTP method (GET, POST, PUT, DELETE).
+     * @return An open connection with Authorization and Content-Type headers set.
+     */
     private fun authenticatedConnection(path: String, method: String): HttpURLConnection {
         val currentToken = authToken ?: sessionManager?.authToken
         val url = URL("$BASE_URL$path")
@@ -139,6 +198,10 @@ object ApiService {
         return conn
     }
 
+    /**
+     * Retrieves the list of all users in the system.
+     * Requires authentication.
+     */
     suspend fun getUsers(): Result<List<User>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/users", "GET")
@@ -156,6 +219,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Retrieves detailed information for a specific user.
+     * @param id The ID of the user to fetch.
+     */
     suspend fun getUserDetails(id: Int): Result<User> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/users/details?id=$id", "GET")
@@ -172,6 +239,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Retrieves the list of all orders associated with the current user.
+     * Requires authentication.
+     */
     suspend fun getOrders(): Result<List<Order>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders", "GET")
@@ -190,6 +261,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Retrieves detailed information for a specific order.
+     * @param id The ID of the order to fetch.
+     */
     suspend fun getOrderDetails(id: Int): Result<Order> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders/details?id=$id", "GET")
@@ -206,6 +281,14 @@ object ApiService {
         }
     }
 
+    /**
+     * Creates a new package order.
+     * @param receiverId The user ID of the package recipient.
+     * @param name The name or title of the package.
+     * @param meta Optional metadata associated with the order.
+     * @param comment An optional comment for the order.
+     * @param photo Optional Base64 encoded photo of the package.
+     */
     suspend fun createOrder(
         receiverId: Int,
         name: String,
@@ -233,6 +316,9 @@ object ApiService {
         }
     }
 
+    /**
+     * Updates the status of an existing order (e.g., from 'SENT' to 'DELIVERED').
+     */
     suspend fun updateOrderStatus(orderId: Int, status: String): Result<Order> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders/status", "PUT")
@@ -254,6 +340,9 @@ object ApiService {
         }
     }
 
+    /**
+     * Fetches the history of scans (location/condition updates) for a specific order.
+     */
     suspend fun getOrderScans(orderId: Int): Result<List<Scan>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/orders/scans?order_id=$orderId", "GET")
@@ -270,6 +359,13 @@ object ApiService {
         }
     }
 
+    /**
+     * Creates a new scan entry for an order, typically recorded when a package changes hands.
+     * @param photoBase64 Base64 encoded image taken during the scan.
+     * @param condition Description of the package condition (e.g., "Good", "Damaged").
+     * @param longitude GPS longitude coordinate.
+     * @param latitude GPS latitude coordinate.
+     */
     suspend fun createOrderScan(
         orderId: Int,
         photoBase64: String,
@@ -305,11 +401,18 @@ object ApiService {
         }
     }
 
+    /**
+     * Helper function to scan a package using raw byte array photo data.
+     * Automatically encodes the photo to Base64 before sending.
+     */
     suspend fun scanPackage(orderId: Int, photoBytes: ByteArray, condition: String, longitude: Float, latitude: Float, comment: String = ""): Result<Unit> {
         val photoBase64 = Base64.encodeToString(photoBytes, Base64.NO_WRAP)
         return createOrderScan(orderId, photoBase64, condition, longitude, latitude, comment)
     }
 
+    /**
+     * Retrieves the current user's contact list.
+     */
     suspend fun getContacts(): Result<List<Contact>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/contacts", "GET")
@@ -326,6 +429,10 @@ object ApiService {
         }
     }
 
+    /**
+     * Adds a user to the current user's contacts.
+     * @param contactId The ID of the user to be added.
+     */
     suspend fun addContact(contactId: Int): Result<Contact> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/contacts", "POST")
@@ -347,6 +454,9 @@ object ApiService {
         }
     }
 
+    /**
+     * Removes a user from the current user's contact list.
+     */
     suspend fun removeContact(contactId: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/contacts", "DELETE")
@@ -368,6 +478,9 @@ object ApiService {
         }
     }
 
+    /**
+     * Retrieves a list of recent activities/notifications for the current user.
+     */
     suspend fun getActivities(): Result<List<Activity>> = withContext(Dispatchers.IO) {
         try {
             val conn = authenticatedConnection("/auth/activities", "GET")
