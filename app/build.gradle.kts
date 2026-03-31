@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.sonar)
     jacoco
 }
 
@@ -39,6 +40,29 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
+            excludes += "/META-INF/AL2.0"
+            excludes += "/META-INF/LGPL2.1"
+        }
+    }
+}
+
+sonar {
+    properties {
+        property("sonar.projectName", "CryptoSeal")
+        property("sonar.projectKey", "2IS70-App-Development_App")
+        property("sonar.organization", "2is70-app-development")
+        property("sonar.host.url", "https://sonarcloud.io")
+        
+        // Point to the JaCoCo XML report (Relative to app folder)
+        property("sonar.coverage.jacoco.xmlReportPaths", "${project.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml")
+        
+        // Exclude UI from analysis
+        property("sonar.exclusions", "**/R.java, **/BuildConfig.java, **/*Activity*.kt, **/*Tab*.kt, **/*Screen*.kt, **/*Composable*.kt, **/*Preview*.kt, **/Theme*.kt, **/Navigation*.kt")
+    }
 }
 
 val fileFilter = mutableSetOf(
@@ -74,26 +98,26 @@ project.afterEvaluate {
         reports {
             xml.required.set(true)
             html.required.set(true)
+            xml.outputLocation.set(file("${project.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml"))
+            html.outputLocation.set(file("${project.buildDir}/reports/jacoco/jacocoTestReport/html"))
         }
 
-        val javaClasses =
-            fileTree("${project.layout.buildDirectory.get()}/intermediates/javac/debug/classes") {
-                exclude(fileFilter)
-            }
-        val kotlinClasses =
-            fileTree("${project.layout.buildDirectory.get()}/tmp/kotlin-classes/debug") {
-                exclude(fileFilter)
-            }
+        val javaClasses = fileTree("${project.buildDir}/intermediates/javac/debug") {
+            include("**/*.class")
+            exclude(fileFilter)
+        }
+        val kotlinClasses = fileTree("${project.buildDir}/tmp/kotlin-classes/debug") {
+            include("**/*.class")
+            exclude(fileFilter)
+        }
         classDirectories.setFrom(files(javaClasses, kotlinClasses))
 
-        sourceDirectories.setFrom(
-            files(
-                "${project.projectDir}/src/main/java",
-                "${project.projectDir}/src/main/kotlin"
-            )
-        )
+        sourceDirectories.setFrom(files(
+            "${project.projectDir}/src/main/java",
+            "${project.projectDir}/src/main/kotlin"
+        ))
 
-        executionData.setFrom(fileTree(project.layout.buildDirectory.get()) {
+        executionData.setFrom(fileTree(project.buildDir) {
             include(
                 "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
                 "outputs/code_coverage/debugAndroidTest/connected/*coverage.ec"
